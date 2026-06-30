@@ -1,0 +1,8 @@
+{
+  "name": "Sentinel Nova",
+  "description": "An elite predictive intelligence platform and AI Chief of Staff designed to anticipate outcomes, forecast trajectories, and optimize goals.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
