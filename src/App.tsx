@@ -1,51 +1,36 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
 import React from 'react';
-import { 
-  Sparkles, 
-  CheckSquare, 
-  Target, 
-  Compass, 
-  LineChart, 
-  Activity, 
-  Cpu, 
-  Bot, 
-  Menu, 
-  Sun, 
-  Moon, 
-  Info,
-  User,
-  GraduationCap,
-  Briefcase,
-  TrendingUp,
-  FileText,
-  Sliders
-} from 'lucide-react';
-
-import { Task, Goal, Opportunity, CareerMetrics, ResumeMetrics, BurnoutMetrics, Conversation, ChatMessage, PredictionEngineMetrics } from './types';
+import { Bot, CalendarDays, CheckSquare, ChevronDown, Compass, LayoutDashboard, LineChart, LogIn, Menu, Moon, Settings, Sparkles, Target, User, X, Sun } from 'lucide-react';
+import { Task, Goal, Opportunity, CareerMetrics, ResumeMetrics, BurnoutMetrics, Conversation, ChatMessage } from './types';
 import { PredictionEngine } from './utils/predictionEngine';
-
-// Page imports
 import Dashboard from './pages/Dashboard';
 import Tasks from './pages/Tasks';
 import Goals from './pages/Goals';
+import AIWorkspace from './pages/AIWorkspace';
 import CareerIntelligence from './pages/CareerIntelligence';
 import ResumeIntelligence from './pages/ResumeIntelligence';
 import OpportunityRadar from './pages/OpportunityRadar';
 import DigitalTwin from './pages/DigitalTwin';
 import Analytics from './pages/Analytics';
-import AIWorkspace from './pages/AIWorkspace';
-import FutureVision from './pages/FutureVision';
+
+const navItems = [
+  { id: 'dashboard', label: 'Today', icon: LayoutDashboard },
+  { id: 'tasks', label: 'Tasks', icon: CheckSquare },
+  { id: 'goals', label: 'Goals', icon: Target },
+  { id: 'calendar', label: 'Calendar', icon: CalendarDays },
+];
+
+const secondaryItems = [
+  { id: 'nova', label: 'Nova AI', icon: Sparkles },
+  { id: 'insights', label: 'Insights', icon: LineChart },
+];
 
 export default function App() {
-  const [activeTab, setActiveTab] = React.useState<string>('dashboard');
-  const [isDark, setIsDark] = React.useState<boolean>(true);
-  const [toast, setToast] = React.useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [activeTab, setActiveTab] = React.useState('dashboard');
+  const [isDark, setIsDark] = React.useState(true);
+  const [mobileNav, setMobileNav] = React.useState(false);
+  const [showProfile, setShowProfile] = React.useState(false);
+  const [toast, setToast] = React.useState<string | null>(null);
 
-  // Global Context: raw storage models
   const [rawTasks, setRawTasks] = React.useState<Task[]>([
     { id: 't1', title: 'Run Vertex AI tuning job', priority: 'critical', status: 'todo', estimatedHours: 8, daysRemaining: 2, difficulty: 'hard', dependencies: [], completionProbability: 0, predictedCompletionDate: '', delayRisk: 'low' },
     { id: 't2', title: 'Implement multi-agent memory loop', priority: 'high', status: 'todo', estimatedHours: 6.5, daysRemaining: 3, difficulty: 'hard', dependencies: [], completionProbability: 0, predictedCompletionDate: '', delayRisk: 'low' },
@@ -54,70 +39,24 @@ export default function App() {
   ]);
 
   const [rawGoals, setRawGoals] = React.useState<Goal[]>([
-    { id: 'g1', title: 'Optimize Gemini Fine-Tuning Hyperparameters', targetDate: '2026-07-15', category: 'technical', progress: 85, successProbability: 0, failureProbability: 0, predictedMilestoneDelay: false, aiRecoveryPlan: [], riskLevel: 'low', reasoning: '' },
-    { id: 'g2', title: 'Audit CV ATS gaps for Google DeepMind', targetDate: '2026-07-20', category: 'career', progress: 50, successProbability: 0, failureProbability: 0, predictedMilestoneDelay: false, aiRecoveryPlan: [], riskLevel: 'medium', reasoning: '' },
-    { id: 'g3', title: 'AWS Solutions Architect Professional Certificate', targetDate: '2026-08-30', category: 'education', progress: 68, successProbability: 0, failureProbability: 0, predictedMilestoneDelay: false, aiRecoveryPlan: [], riskLevel: 'low', reasoning: '' }
+    { id: 'g1', title: 'Ship Sentinel Nova MVP', targetDate: '2026-09-12', category: 'project', progress: 72, successProbability: 0, failureProbability: 0, predictedMilestoneDelay: false, aiRecoveryPlan: [], riskLevel: 'low', reasoning: '' },
+    { id: 'g2', title: 'Become an AI Engineer', targetDate: '2026-12-31', category: 'career', progress: 48, successProbability: 0, failureProbability: 0, predictedMilestoneDelay: false, aiRecoveryPlan: [], riskLevel: 'medium', reasoning: '' },
+    { id: 'g3', title: 'Master NLP + LangChain', targetDate: '2026-10-30', category: 'education', progress: 61, successProbability: 0, failureProbability: 0, predictedMilestoneDelay: false, aiRecoveryPlan: [], riskLevel: 'low', reasoning: '' }
   ]);
 
-  const [rawOpps, setRawOpps] = React.useState<Opportunity[]>([
-    { id: 'o1', title: 'Research Scientist Intern - Agent Swarms', company: 'Google DeepMind', type: 'Internship', deadline: 'In 5 days', url: 'https://deepmind.google/careers', fitScore: 0, expectedSuccess: 0, applicationConfidence: 0, careerImpactScore: 0, deadlineUrgency: 'low' },
-    { id: 'o2', title: 'ML Infrastructure Engineer', company: 'OpenAI', type: 'Full-Time', deadline: 'In 12 days', url: 'https://openai.com/careers', fitScore: 0, expectedSuccess: 0, applicationConfidence: 0, careerImpactScore: 0, deadlineUrgency: 'medium' },
-    { id: 'o3', title: 'Distributed Agent Training Hackathon', company: 'Meta', type: 'Hackathon', deadline: 'In 2 days', url: 'https://meta.ai', fitScore: 0, expectedSuccess: 0, applicationConfidence: 0, careerImpactScore: 0, deadlineUrgency: 'critical' }
-  ]);
-
+  const [rawOpps, setRawOpps] = React.useState<Opportunity[]>([]);
   const [skills, setSkills] = React.useState<{ name: string; score: number }[]>([
-    { name: "TensorFlow", score: 85 },
-    { name: "PyTorch", score: 80 },
-    { name: "Transformers", score: 70 },
-    { name: "Hyperparameter Search", score: 65 },
-    { name: "Vertex AI", score: 50 },
-    { name: "System Design", score: 60 }
+    { name: 'TensorFlow', score: 85 }, { name: 'PyTorch', score: 80 }, { name: 'Transformers', score: 70 }, { name: 'LangChain', score: 75 }, { name: 'Vertex AI', score: 50 }, { name: 'System Design', score: 60 }
   ]);
 
-  // Swarm Chat Strategic Session State
-  const [conversations, setConversations] = React.useState<Conversation[]>([
-    {
-      id: 'conv_1',
-      title: 'DeepMind ATS Alignment Strategy',
-      createdAt: new Date().toISOString(),
-      messages: [
-        {
-          id: 'welcome_m',
-          role: 'model',
-          content: `Welcome back, Chief. I have parsed your active digital twin workload models and CV assets.
+  const [conversations, setConversations] = React.useState<Conversation[]>([{ id: 'conv_1', title: 'Planning session', createdAt: new Date().toISOString(), messages: [] }]);
+  const [activeConversationId, setActiveConversationId] = React.useState('conv_1');
 
-### Immediate Forecast Findings:
-1. **Schedule Bottleneck:** You have **2 critical path tasks** due in under 72 hours. Probability of on-time delivery is at **62%**.
-2. **Resume Audit:** Current DeepMind ATS match rate is **78%**. Key gaps include "Continuous Integration" and "SCXML Parsing".
-
-Ask me to scan gaps, outline hyperparameter search configurations, or project your trajectory.`,
-          timestamp: new Date(Date.now() - 3600000).toISOString(),
-          confidenceScore: { overall: 94, reasoningQuality: 92, dataQuality: 88, riskLevel: 'low' },
-          explainability: {
-            why: "Drawn from consolidated task completion ratios and resume parsing models.",
-            benefits: ["Identify scheduling gaps before they trigger delays", "Quantify hiring probabilities early"],
-            risks: ["Study velocity may lag if development is favored exclusively"],
-            nextSteps: ["Study Vertex AI custom tuning docs", "Automate CV keyword integration"]
-          },
-          decisionTree: {
-            options: [
-              { name: "Optimize Research Scientist Track", chosen: true, confidence: 92, pros: ["Highest salary potential", "Optimal skill overlap"], cons: ["Higher learning curve"] }
-            ]
-          }
-        }
-      ]
-    }
-  ]);
-  const [activeConversationId, setActiveConversationId] = React.useState<string>('conv_1');
-
-  // Trigger feedback messages
-  const showToast = (message: string, type: 'success' | 'error') => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3500);
+  const showToast = (message: string) => {
+    setToast(message);
+    window.setTimeout(() => setToast(null), 3000);
   };
 
-  // RECALCULATE SIMULATION STATE: The core of Predictive Intelligence
-  // Anytime raw records change, run our 10 predictive models to refresh outputs
   const computedState = React.useMemo(() => {
     const tasks = PredictionEngine.calculateTaskPredictions(rawTasks);
     const goals = PredictionEngine.calculateGoalSuccess(rawGoals, tasks);
@@ -125,382 +64,88 @@ Ask me to scan gaps, outline hyperparameter search configurations, or project yo
     const resume = PredictionEngine.calculateResumeIntelligence(skills.length);
     const opportunities = PredictionEngine.calculateOpportunityMatch(rawOpps, skills.map(s => s.name));
     const burnout = PredictionEngine.calculateBurnoutAndProductivity(tasks);
-    const engineStats = PredictionEngine.getEngineMetrics();
-
-    return { tasks, goals, career, resume, opportunities, burnout, engineStats };
+    return { tasks, goals, career, resume, opportunities, burnout, engineStats: PredictionEngine.getEngineMetrics() };
   }, [rawTasks, rawGoals, rawOpps, skills]);
 
-  // CRUD handlers: Tasks
   const handleAddTask = (task: Omit<Task, 'id' | 'completionProbability' | 'predictedCompletionDate' | 'delayRisk' | 'timeAllocationHours'>) => {
-    const newTask: Task = {
-      ...task,
-      id: `t_${Date.now()}`,
-      completionProbability: 50,
-      predictedCompletionDate: 'In jeopardy',
-      delayRisk: 'low'
-    };
-    setRawTasks(prev => [newTask, ...prev]);
-    showToast('Task specification established in system log.', 'success');
+    setRawTasks(prev => [{ ...task, id: `t_${Date.now()}`, completionProbability: 50, predictedCompletionDate: '', delayRisk: 'low' }, ...prev]);
+    showToast('Task added');
   };
-
-  const handleUpdateTask = (id: string, updates: Partial<Task>) => {
-    setRawTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
-    showToast('Task parameters updated. Re-running ML simulations...', 'success');
-  };
-
-  const handleDeleteTask = (id: string) => {
-    setRawTasks(prev => prev.filter(t => t.id !== id));
-    showToast('Task purged. Re-calibrating workloads...', 'success');
-  };
-
-  // CRUD handlers: Goals
+  const handleUpdateTask = (id: string, updates: Partial<Task>) => { setRawTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t)); };
+  const handleDeleteTask = (id: string) => { setRawTasks(prev => prev.filter(t => t.id !== id)); showToast('Task deleted'); };
   const handleAddGoal = (goal: Omit<Goal, 'id' | 'successProbability' | 'failureProbability' | 'predictedMilestoneDelay' | 'riskLevel' | 'aiRecoveryPlan' | 'reasoning'>) => {
-    const newGoal: Goal = {
-      ...goal,
-      id: `g_${Date.now()}`,
-      successProbability: 50,
-      failureProbability: 50,
-      predictedMilestoneDelay: false,
-      aiRecoveryPlan: [],
-      riskLevel: 'low',
-      reasoning: 'Analyzing goal specifications...'
-    };
-    setRawGoals(prev => [newGoal, ...prev]);
-    showToast('Strategic milestone added to track.', 'success');
+    setRawGoals(prev => [{ ...goal, id: `g_${Date.now()}`, successProbability: 50, failureProbability: 50, predictedMilestoneDelay: false, aiRecoveryPlan: [], riskLevel: 'low', reasoning: '' }, ...prev]);
+    showToast('Goal added');
   };
+  const handleUpdateGoal = (id: string, updates: Partial<Goal>) => { setRawGoals(prev => prev.map(g => g.id === id ? { ...g, ...updates } : g)); };
+  const handleDeleteGoal = (id: string) => { setRawGoals(prev => prev.filter(g => g.id !== id)); showToast('Goal deleted'); };
+  const handleAddOpportunity = (opp: Omit<Opportunity, 'id' | 'fitScore' | 'expectedSuccess' | 'applicationConfidence' | 'careerImpactScore' | 'deadlineUrgency'>) => setRawOpps(prev => [{ ...opp, id: `o_${Date.now()}`, fitScore: 50, expectedSuccess: 50, applicationConfidence: 50, careerImpactScore: 50, deadlineUrgency: 'low' }, ...prev]);
+  const handleDeleteOpportunity = (id: string) => setRawOpps(prev => prev.filter(o => o.id !== id));
+  const handleUpdateSkills = (name: string, score: number) => setSkills(prev => prev.map(s => s.name === name ? { ...s, score } : s));
 
-  const handleUpdateGoal = (id: string, updates: Partial<Goal>) => {
-    setRawGoals(prev => prev.map(g => g.id === id ? { ...g, ...updates } : g));
-    showToast('Goal target updated. Re-calculating success probability...', 'success');
-  };
-
-  const handleDeleteGoal = (id: string) => {
-    setRawGoals(prev => prev.filter(g => g.id !== id));
-    showToast('Strategic goal milestone deleted.', 'success');
-  };
-
-  // CRUD handlers: Opportunities
-  const handleAddOpportunity = (opp: Omit<Opportunity, 'id' | 'fitScore' | 'expectedSuccess' | 'applicationConfidence' | 'careerImpactScore' | 'deadlineUrgency'>) => {
-    const newOpp: Opportunity = {
-      ...opp,
-      id: `o_${Date.now()}`,
-      fitScore: 50,
-      expectedSuccess: 50,
-      applicationConfidence: 50,
-      careerImpactScore: 50,
-      deadlineUrgency: 'low'
-    };
-    setRawOpps(prev => [newOpp, ...prev]);
-    showToast('Listing logged to Radar database.', 'success');
-  };
-
-  const handleDeleteOpportunity = (id: string) => {
-    setRawOpps(prev => prev.filter(o => o.id !== id));
-    showToast('Opportunity posting removed.', 'success');
-  };
-
-  // Skills tuner (updates Trajectory)
-  const handleUpdateSkills = (name: string, score: number) => {
-    setSkills(prev => prev.map(s => s.name === name ? { ...s, score } : s));
-  };
-
-  // Recalibrate manual triggers
-  const handleRecalibrate = () => {
-    // Simply forces a state updates alerts
-    showToast('All 10 Machine Learning models trained and calibrated successfully.', 'success');
-  };
-
-  // Send Swarm Strategic message
   const handleSendMessage = async (convId: string, text: string) => {
-    const userMsg: ChatMessage = {
-      id: `msg_${Date.now()}`,
-      role: 'user',
-      content: text,
-      timestamp: new Date().toISOString()
-    };
-
-    // Update frontend state with user message immediately
-    setConversations(prev => prev.map(c => {
-      if (c.id === convId) {
-        return { ...c, messages: [...c.messages, userMsg] };
-      }
-      return c;
-    }));
-
+    const userMsg: ChatMessage = { id: `msg_${Date.now()}`, role: 'user', content: text, timestamp: new Date().toISOString() };
+    setConversations(prev => prev.map(c => c.id === convId ? { ...c, messages: [...c.messages, userMsg] } : c));
     try {
-      // POST user message, tasks, goals to Express backend API
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: text,
-          history: conversations.find(c => c.id === convId)?.messages || [],
-          tasks: computedState.tasks,
-          goals: computedState.goals
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error('API server failed to respond.');
-      }
-
-      const resData = await response.json();
-
-      const modelMsg: ChatMessage = {
-        id: `msg_${Date.now() + 1}`,
-        role: 'model',
-        content: resData.content,
-        timestamp: new Date().toISOString(),
-        explainability: resData.explainability,
-        decisionTree: resData.decisionTree,
-        confidenceScore: resData.confidenceScore,
-        observability: resData.observability,
-        insightsGenerated: resData.insightsGenerated,
-        agentSteps: [
-          { agentId: 'planner', name: 'Planner Agent', durationMs: 420 },
-          { agentId: 'context', name: 'Context Agent', durationMs: 380 },
-          { agentId: 'research', name: 'Research Agent', durationMs: 510 },
-          { agentId: 'reasoner', name: 'Reasoning Agent', durationMs: 650 },
-          { agentId: 'risk', name: 'Risk Agent', durationMs: 440 },
-          { agentId: 'reviewer', name: 'Reviewer Agent', durationMs: 320 }
-        ]
-      };
-
-      setConversations(prev => prev.map(c => {
-        if (c.id === convId) {
-          return { ...c, messages: [...c.messages, modelMsg] };
-        }
-        return c;
-      }));
-
-    } catch (err) {
-      console.error(err);
-      showToast('API swarm routing error. Using cached local intelligence.', 'error');
-    }
+      const response = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: text, history: conversations.find(c => c.id === convId)?.messages || [], tasks: computedState.tasks, goals: computedState.goals }) });
+      if (!response.ok) throw new Error('API failed');
+      const data = await response.json();
+      const modelMsg: ChatMessage = { id: `msg_${Date.now()+1}`, role: 'model', content: data.content || 'I could not complete that plan yet.', timestamp: new Date().toISOString(), confidenceScore: data.confidenceScore, explainability: data.explainability };
+      setConversations(prev => prev.map(c => c.id === convId ? { ...c, messages: [...c.messages, modelMsg] } : c));
+    } catch { showToast('Nova is temporarily unavailable'); }
   };
 
-  const handleNewConversation = () => {
-    const newId = `conv_${Date.now()}`;
-    const newConv: Conversation = {
-      id: newId,
-      title: `Consultation session ${conversations.length + 1}`,
-      createdAt: new Date().toISOString(),
-      messages: []
-    };
-    setConversations(prev => [newConv, ...prev]);
-    setActiveConversationId(newId);
-    showToast('Fresh strategic consultation session booted.', 'success');
-  };
+  const go = (tab: string) => { setActiveTab(tab); setMobileNav(false); };
 
-  const handleDeleteConversation = (id: string) => {
-    setConversations(prev => prev.filter(c => c.id !== id));
-    showToast('Strategic logs purged.', 'success');
+  const renderPage = () => {
+    if (activeTab === 'dashboard') return <Dashboard {...computedState} onNavigate={go} isDark={isDark} />;
+    if (activeTab === 'tasks') return <Tasks tasks={computedState.tasks} onAddTask={handleAddTask} onUpdateTask={handleUpdateTask} onDeleteTask={handleDeleteTask} onRecalibrate={() => showToast('Nova recalculated your workload')} isDark={isDark} />;
+    if (activeTab === 'goals') return <Goals goals={computedState.goals} onAddGoal={handleAddGoal} onUpdateGoal={handleUpdateGoal} onDeleteGoal={handleDeleteGoal} onRecalibrate={() => showToast('Goal plan refreshed')} isDark={isDark} />;
+    if (activeTab === 'nova') return <AIWorkspace conversations={conversations} activeConversationId={activeConversationId} onSendMessage={handleSendMessage} onDeleteConversation={(id) => setConversations(prev => prev.filter(c => c.id !== id))} onSelectConversation={setActiveConversationId} onNewConversation={() => { const id = `conv_${Date.now()}`; setConversations(prev => [{ id, title: 'New planning session', createdAt: new Date().toISOString(), messages: [] }, ...prev]); setActiveConversationId(id); }} tasks={computedState.tasks} goals={computedState.goals} isDark={isDark} showToast={showToast} />;
+    if (activeTab === 'insights') return <Analytics burnout={computedState.burnout} engineStats={computedState.engineStats} isDark={isDark} />;
+    if (activeTab === 'career') return <CareerIntelligence career={computedState.career} onUpdateSkills={handleUpdateSkills} isDark={isDark} />;
+    if (activeTab === 'resume') return <ResumeIntelligence resume={computedState.resume} onOptimize={() => showToast('Resume analysis refreshed')} isDark={isDark} />;
+    if (activeTab === 'radar') return <OpportunityRadar opportunities={computedState.opportunities} onAddOpportunity={handleAddOpportunity} onDeleteOpportunity={handleDeleteOpportunity} onRecalibrate={() => showToast('Opportunity ranking refreshed')} isDark={isDark} />;
+    if (activeTab === 'twin') return <DigitalTwin burnout={computedState.burnout} engineStats={computedState.engineStats} onUpdateWeights={() => showToast('Behavior model refreshed')} isDark={isDark} />;
+    if (activeTab === 'calendar') return <CalendarPlaceholder onConnect={() => showToast('Google Calendar connection is scheduled for Day 4')} />;
+    return <SettingsPlaceholder onGoogle={() => showToast('Google sign-in foundation is ready for OAuth wiring')} />;
   };
 
   return (
-    <div className={`min-h-screen font-sans flex ${isDark ? 'bg-slate-950 text-slate-100' : 'bg-gray-50 text-slate-900'}`}>
-      
-      {/* Toast Alert */}
-      {toast && (
-        <div className={`fixed top-5 right-5 z-50 p-4 rounded-xl shadow-2xl border text-xs font-mono font-bold uppercase flex items-center gap-2 animate-in fade-in slide-in-from-top-4 duration-300 ${
-          toast.type === 'success' 
-            ? 'bg-emerald-600/10 border-emerald-500 text-emerald-400' 
-            : 'bg-red-600/10 border-red-500 text-red-400'
-        }`}>
-          <div className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
-          <span>{toast.message}</span>
+    <div className="min-h-screen bg-slate-950 text-slate-100">
+      {toast && <div className="fixed right-5 top-5 z-[80] rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm font-medium text-white shadow-2xl">{toast}</div>}
+      <header className="fixed inset-x-0 top-0 z-50 h-16 border-b border-slate-800/80 bg-slate-950/90 backdrop-blur-xl">
+        <div className="flex h-full items-center justify-between px-4 lg:px-6">
+          <div className="flex items-center gap-3"><button className="rounded-lg p-2 text-slate-400 lg:hidden" onClick={() => setMobileNav(v => !v)}>{mobileNav ? <X size={20}/> : <Menu size={20}/>}</button><button onClick={() => go('dashboard')} className="flex items-center gap-2.5"><div className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-600 shadow-lg shadow-violet-900/30"><Bot size={19}/></div><div className="text-left"><div className="text-sm font-semibold tracking-tight">Sentinel Nova</div><div className="hidden text-[10px] text-slate-500 sm:block">AI Chief of Staff</div></div></button></div>
+          <div className="flex items-center gap-1.5"><button onClick={() => setIsDark(v => !v)} className="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-white">{isDark ? <Sun size={17}/> : <Moon size={17}/>}</button><button onClick={() => setShowProfile(v => !v)} className="flex items-center gap-2 rounded-xl p-1.5 hover:bg-slate-800"><div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-800 text-xs font-semibold">HM</div><ChevronDown size={14} className="hidden text-slate-500 sm:block"/></button></div>
         </div>
-      )}
+        {showProfile && <div className="absolute right-4 top-14 w-52 rounded-xl border border-slate-800 bg-slate-900 p-2 shadow-2xl"><div className="px-3 py-2 text-xs text-slate-500">Signed in as</div><div className="px-3 pb-2 text-sm font-medium text-white">Hari Milan</div><button onClick={() => { setShowProfile(false); go('settings'); }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-300 hover:bg-slate-800"><Settings size={15}/> Settings</button></div>}
+      </header>
 
-      {/* LEFT COMPACT UTILITY RAIL / NAVIGATION SIDEBAR */}
-      <div className={`w-64 border-r shrink-0 flex flex-col justify-between p-5 ${
-        isDark ? 'bg-slate-950/40 border-gray-900' : 'bg-white border-gray-200'
-      }`}>
-        
-        <div className="space-y-6">
-          
-          {/* Logo / Brand Header */}
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-violet-500/20">
-              <Bot size={18} className="stroke-[2.2]" />
-            </div>
-            <div>
-              <h1 className="text-sm font-extrabold tracking-tight font-space leading-none">Sentinel Nova</h1>
-              <span className="text-[9px] font-mono text-gray-500 mt-1 inline-block uppercase font-bold tracking-wider">Predictive Agent OS</span>
-            </div>
-          </div>
+      <aside className={`fixed bottom-0 left-0 top-16 z-40 w-64 border-r border-slate-800/80 bg-slate-950 px-3 py-5 transition-transform lg:translate-x-0 ${mobileNav ? 'translate-x-0' : '-translate-x-full'}`}>
+        <nav className="space-y-1">{navItems.map(item => <NavButton key={item.id} item={item} active={activeTab === item.id} onClick={() => go(item.id)} />)}</nav>
+        <div className="my-5 border-t border-slate-800"/>
+        <div className="px-3 pb-2 text-[10px] font-semibold uppercase tracking-widest text-slate-600">Intelligence</div>
+        <nav className="space-y-1">{secondaryItems.map(item => <NavButton key={item.id} item={item} active={activeTab === item.id} onClick={() => go(item.id)} />)}</nav>
+        <div className="my-5 border-t border-slate-800"/>
+        <NavButton item={{ id: 'settings', label: 'Settings', icon: Settings }} active={activeTab === 'settings'} onClick={() => go('settings')} />
+        <div className="mt-auto pt-8"><div className="rounded-xl border border-slate-800 bg-slate-900/60 p-3"><div className="flex items-center gap-2"><div className="rounded-lg bg-violet-500/10 p-2 text-violet-400"><Sparkles size={15}/></div><div><p className="text-xs font-semibold text-slate-200">Nova is ready</p><p className="text-[10px] text-slate-500">Plan, prioritize, adapt.</p></div></div></div></div>
+      </aside>
 
-          {/* Nav Items Feed */}
-          <nav className="space-y-1">
-            <span className="text-[9px] font-mono font-bold text-gray-500 uppercase tracking-widest block mb-2 px-3">Telemetry Control</span>
-            
-            {[
-              { id: 'dashboard', label: 'Predictive Board', icon: Cpu },
-              { id: 'workspace', label: 'Swarm Chat Console', icon: Bot },
-              { id: 'tasks', label: 'Task Specifications', icon: CheckSquare },
-              { id: 'goals', label: 'Strategic Milestones', icon: Target },
-              { id: 'radar', label: 'Opportunity Radar', icon: Compass },
-              { id: 'career', label: 'Career Trajectory', icon: TrendingUp },
-              { id: 'resume', label: 'ATS Optimization', icon: FileText },
-              { id: 'twin', label: 'Digital Twin Model', icon: Sliders },
-              { id: 'analytics', label: 'Systemic Analytics', icon: LineChart },
-              { id: 'future', label: 'Strategic Roadmap', icon: Sparkles }
-            ].map((item) => {
-              const isActive = activeTab === item.id;
-              const Icon = item.icon;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => setActiveTab(item.id)}
-                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold cursor-pointer transition-all ${
-                    isActive 
-                      ? 'bg-violet-600 text-white font-bold shadow-md shadow-violet-600/10' 
-                      : 'text-gray-400 hover:bg-gray-800/10 hover:text-white'
-                  }`}
-                >
-                  <Icon size={14} className={isActive ? 'stroke-[2.5]' : 'stroke-[1.8]'} />
-                  <span>{item.label}</span>
-                </button>
-              );
-            })}
-          </nav>
-        </div>
-
-        {/* Footer User Avatar & Theme Controller */}
-        <div className="space-y-4 pt-5 border-t border-gray-800/10">
-          
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-gray-800 flex items-center justify-center text-gray-400 font-bold text-xs uppercase font-mono">
-                AX
-              </div>
-              <div>
-                <div className="text-xs font-bold leading-none">Alex Mercer</div>
-                <span className="text-[9px] font-mono text-gray-500 block mt-0.5">CHIEF ENGINEER</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between text-xs text-gray-500 font-mono">
-            <button
-              onClick={() => setIsDark(!isDark)}
-              className="p-1.5 hover:bg-gray-800/15 rounded-lg transition-all cursor-pointer shrink-0"
-              title="Toggle theme mode"
-            >
-              {isDark ? <Sun size={13} /> : <Moon size={13} />}
-            </button>
-            <span className="text-[9px]">v3.2.0-NOVA</span>
-          </div>
-
-        </div>
-
-      </div>
-
-      {/* MAIN VIEWPORT CANVAS */}
-      <main className="flex-1 overflow-y-auto p-8 max-w-7xl mx-auto space-y-6">
-        
-        {/* Active Tab Router */}
-        {activeTab === 'dashboard' && (
-          <Dashboard 
-            tasks={computedState.tasks} 
-            goals={computedState.goals} 
-            opportunities={computedState.opportunities}
-            career={computedState.career}
-            resume={computedState.resume}
-            burnout={computedState.burnout}
-            onNavigate={setActiveTab}
-            isDark={isDark}
-          />
-        )}
-
-        {activeTab === 'tasks' && (
-          <Tasks 
-            tasks={computedState.tasks}
-            onAddTask={handleAddTask}
-            onUpdateTask={handleUpdateTask}
-            onDeleteTask={handleDeleteTask}
-            onRecalibrate={handleRecalibrate}
-            isDark={isDark}
-          />
-        )}
-
-        {activeTab === 'goals' && (
-          <Goals 
-            goals={computedState.goals}
-            onAddGoal={handleAddGoal}
-            onUpdateGoal={handleUpdateGoal}
-            onDeleteGoal={handleDeleteGoal}
-            onRecalibrate={handleRecalibrate}
-            isDark={isDark}
-          />
-        )}
-
-        {activeTab === 'career' && (
-          <CareerIntelligence 
-            career={computedState.career}
-            onUpdateSkills={handleUpdateSkills}
-            isDark={isDark}
-          />
-        )}
-
-        {activeTab === 'resume' && (
-          <ResumeIntelligence 
-            resume={computedState.resume}
-            onOptimize={handleRecalibrate}
-            isDark={isDark}
-          />
-        )}
-
-        {activeTab === 'radar' && (
-          <OpportunityRadar 
-            opportunities={computedState.opportunities}
-            onAddOpportunity={handleAddOpportunity}
-            onDeleteOpportunity={handleDeleteOpportunity}
-            onRecalibrate={handleRecalibrate}
-            isDark={isDark}
-          />
-        )}
-
-        {activeTab === 'twin' && (
-          <DigitalTwin 
-            burnout={computedState.burnout}
-            engineStats={computedState.engineStats}
-            onUpdateWeights={() => showToast('Twin behavioral weights synchronized. Simulating workflow outcomes...', 'success')}
-            isDark={isDark}
-          />
-        )}
-
-        {activeTab === 'analytics' && (
-          <Analytics 
-            burnout={computedState.burnout}
-            engineStats={computedState.engineStats}
-            isDark={isDark}
-          />
-        )}
-
-        {activeTab === 'workspace' && (
-          <AIWorkspace 
-            conversations={conversations}
-            activeConversationId={activeConversationId}
-            onSendMessage={handleSendMessage}
-            onDeleteConversation={handleDeleteConversation}
-            onSelectConversation={setActiveConversationId}
-            onNewConversation={handleNewConversation}
-            tasks={computedState.tasks}
-            goals={computedState.goals}
-            isDark={isDark}
-            showToast={showToast}
-          />
-        )}
-
-        {activeTab === 'future' && (
-          <FutureVision 
-            isDark={isDark}
-          />
-        )}
-
-      </main>
-
+      <main className="min-h-screen pt-16 lg:pl-64"><div className="mx-auto max-w-[1400px] p-5 sm:p-7 lg:p-10">{renderPage()}</div></main>
     </div>
   );
+}
+
+function NavButton({ item, active, onClick }: { item: { id: string; label: string; icon: React.ComponentType<{ size?: number }> }; active: boolean; onClick: () => void }) {
+  const Icon = item.icon;
+  return <button onClick={onClick} className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${active ? 'bg-violet-500/10 text-violet-300' : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'}`}><Icon size={17}/><span>{item.label}</span>{active && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-violet-400"/>}</button>;
+}
+
+function CalendarPlaceholder({ onConnect }: { onConnect: () => void }) {
+  return <div className="mx-auto max-w-3xl py-16 text-center"><div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-violet-500/10 text-violet-300"><CalendarDays size={25}/></div><h1 className="mt-5 text-3xl font-semibold">Your calendar, inside Nova.</h1><p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-slate-400">Google Calendar will become Nova's availability layer: events, focus blocks and intelligent scheduling without turning your calendar into a second task list.</p><button onClick={onConnect} className="mt-7 rounded-xl bg-white px-5 py-2.5 text-sm font-semibold text-slate-950">Connect Google Calendar</button></div>;
+}
+
+function SettingsPlaceholder({ onGoogle }: { onGoogle: () => void }) {
+  return <div className="mx-auto max-w-3xl"><h1 className="text-3xl font-semibold">Settings</h1><p className="mt-2 text-sm text-slate-400">Account, integrations and Nova preferences.</p><div className="mt-7 rounded-2xl border border-slate-800 bg-slate-900/70 p-6"><div className="flex items-center justify-between gap-4"><div><p className="font-semibold text-white">Google account</p><p className="mt-1 text-sm text-slate-500">Sign in with Google will be the identity layer for Sentinel Nova.</p></div><button onClick={onGoogle} className="inline-flex items-center gap-2 rounded-xl border border-slate-700 px-4 py-2 text-sm font-medium text-white"><LogIn size={15}/> Continue with Google</button></div></div></div>;
 }
