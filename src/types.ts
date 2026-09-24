@@ -39,53 +39,110 @@ export interface Conversation {
   createdAt: string;
 }
 
-export interface Task {
+export type TaskStatus = 'inbox' | 'todo' | 'in_progress' | 'completed' | 'cancelled';
+export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
+
+export interface Subtask {
   id: string;
   title: string;
-  priority: 'low' | 'medium' | 'high' | 'critical';
-  status: 'todo' | 'in_progress' | 'done';
-  estimatedHours: number;
-  pastCompletionRate?: number; // percentage
-  daysRemaining: number;
-  difficulty: 'easy' | 'medium' | 'hard';
-  dependencies: string[]; // List of task IDs or titles
-  
-  // Predictive metrics
-  completionProbability: number; // calculated %
-  predictedCompletionDate: string;
-  delayRisk: 'low' | 'medium' | 'high' | 'critical';
+  completed: boolean;
+  createdAt: string;
+}
+
+export type RecurrenceType = 'daily' | 'weekly' | 'monthly' | 'custom';
+
+export interface TaskRecurrence {
+  type: RecurrenceType;
+  interval?: number;
+  daysOfWeek?: string[];
+  endDate?: string | null;
+}
+
+export interface Task {
+  id: string;
+  userId: string;
+  title: string;
+  description?: string;
+  status: TaskStatus;
+  priority: TaskPriority;
+  dueDate?: string | null;
+  dueTime?: string | null;
+  estimatedMinutes: number;
+  tags: string[];
+  subtasks: Subtask[];
+  projectId?: string | null;
+  goalId?: string | null;
+  milestoneId?: string | null;
+  recurring?: TaskRecurrence | null;
+  dependencyIds: string[];
+  scheduledStart?: string | null;
+  scheduledEnd?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string | null;
+
+  // Compatibility and predictive fields for future AI/Engine enhancements
+  estimatedHours?: number;
+  daysRemaining?: number;
+  difficulty?: 'easy' | 'medium' | 'hard';
+  dependencies?: string[];
+  completionProbability?: number;
+  predictedCompletionDate?: string;
+  delayRisk?: 'low' | 'medium' | 'high' | 'critical';
   suggestedReorderIdx?: number;
   timeAllocationHours?: number;
+  pastCompletionRate?: number;
 }
+
+export type GoalStatus = 'active' | 'completed' | 'archived';
+export type GoalPriority = 'low' | 'medium' | 'high' | 'critical';
 
 export interface Goal {
   id: string;
+  userId: string;
   title: string;
-  targetDate: string;
-  category: 'career' | 'technical' | 'project' | 'education';
+  description?: string;
+  status: GoalStatus;
+  priority: GoalPriority;
+  targetDate?: string;
   progress: number; // 0-100
-  
-  // Predictive metrics
-  successProbability: number; // calculated %
-  failureProbability: number; // calculated %
-  predictedMilestoneDelay: boolean;
-  aiRecoveryPlan: string[];
-  riskLevel: 'low' | 'medium' | 'high' | 'critical';
-  reasoning: string;
+  projectIds: string[];
+  createdAt: string;
+  updatedAt: string;
+
+  // Compatibility and predictive fields for existing engine & analytics
+  category?: 'career' | 'technical' | 'project' | 'education';
+  successProbability?: number; // calculated %
+  failureProbability?: number; // calculated %
+  predictedMilestoneDelay?: boolean;
+  aiRecoveryPlan?: string[];
+  riskLevel?: 'low' | 'medium' | 'high' | 'critical';
+  reasoning?: string;
 }
+
+export type ProjectStatus = 'active' | 'completed' | 'archived' | 'on_hold';
+export type ProjectPriority = 'low' | 'medium' | 'high' | 'critical';
 
 export interface Project {
   id: string;
+  userId: string;
+  goalId?: string | null;
   name: string;
-  description: string;
-  status: 'active' | 'completed' | 'on_hold';
-  completionRate: number;
-  expectedEndDate: string;
-  
-  // Predictive metrics
-  estimatedLaunchProbability: number; // %
-  bottlenecks: string[];
-  skillGrowthFactor: number; // expected scale contribution
+  description?: string;
+  status: ProjectStatus;
+  priority?: ProjectPriority;
+  progress: number; // 0-100
+  targetDate?: string | null;
+  taskIds: string[];
+  createdAt: string;
+  updatedAt: string;
+
+  // Compatibility and predictive metrics
+  completionRate?: number;
+  expectedEndDate?: string;
+  estimatedLaunchProbability?: number;
+  bottlenecks?: string[];
+  skillGrowthFactor?: number;
 }
 
 export interface Opportunity {
@@ -135,3 +192,461 @@ export interface PredictionEngineMetrics {
   f1Score: number;
   predictionDrift: number; // indicator of shifts
 }
+
+export type DayOfWeek = 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday' | 'Sunday';
+export type CommitmentType = 'College' | 'Work' | 'Personal' | 'Other';
+export type PreferredPeriod = 'Morning' | 'Afternoon' | 'Evening' | 'No strong preference';
+export type DailyFocusCapacity = 'Less than 2 hours' | '2–4 hours' | '4–6 hours' | '6+ hours';
+export type PlanningStyle = 'Deep focus first' | 'Important tasks first' | 'Easier tasks first' | 'Balanced throughout the day';
+export type BufferMinutes = 5 | 10 | 15 | 30;
+export type MajorTasksPerDay = '1–2' | '3–4' | '5+';
+
+export interface SleepSchedule {
+  weekdaySleep: string;
+  weekdayWake: string;
+  weekendDifferent: boolean;
+  weekendSleep?: string;
+  weekendWake?: string;
+}
+
+export interface RecurringBlock {
+  id: string;
+  title: string;
+  type: CommitmentType;
+  days: DayOfWeek[];
+  startTime: string;
+  endTime: string;
+  location?: string;
+  notes?: string;
+}
+
+export interface PreferredWorkingHours {
+  startTime: string;
+  endTime: string;
+  preferredPeriods: PreferredPeriod[];
+}
+
+export interface UserPlanningProfile {
+  userId: string;
+  onboardingCompleted: boolean;
+  onboardingSkipped?: boolean;
+  timezone: string;
+  sleepSchedule: SleepSchedule;
+  recurringBlocks: RecurringBlock[];
+  preferredWorkingHours: PreferredWorkingHours;
+  preferredPeriods: PreferredPeriod[];
+  dailyFocusCapacity: DailyFocusCapacity;
+  planningStyle: PlanningStyle;
+  bufferMinutes: BufferMinutes;
+  dailyMajorTaskTarget: MajorTasksPerDay;
+  majorTasksPerDay: MajorTasksPerDay;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Google Calendar & Availability Foundation (Day 4)
+export interface GoogleCalendar {
+  id: string;
+  name: string;
+  description?: string;
+  primary?: boolean;
+  selected: boolean;
+  backgroundColor?: string;
+  foregroundColor?: string;
+  accessRole?: string;
+  timeZone?: string;
+}
+
+export interface CalendarEvent {
+  id: string;
+  calendarId: string;
+  calendarName?: string;
+  calendarColor?: string;
+  title: string;
+  description?: string;
+  start: string; // ISO 8601 string
+  end: string;   // ISO 8601 string
+  allDay: boolean;
+  status?: 'confirmed' | 'tentative' | 'cancelled';
+  recurring?: boolean;
+  location?: string;
+  transparency?: 'opaque' | 'transparent';
+}
+
+export type AvailabilityBlockType =
+  | 'calendar_busy'
+  | 'sleep'
+  | 'fixed_commitment'
+  | 'preferred_focus'
+  | 'working_hours'
+  | 'free_window'
+  | 'buffer';
+
+export type AvailabilityClassification = 'hard' | 'soft' | 'free';
+
+export interface AvailabilityBlock {
+  id: string;
+  start: string; // ISO 8601
+  end: string;   // ISO 8601
+  durationMinutes: number;
+  source: AvailabilityBlockType;
+  title: string;
+  classification: AvailabilityClassification;
+  calendarId?: string;
+  eventId?: string;
+  bufferedStart?: string;
+  bufferedEnd?: string;
+  metadata?: Record<string, any>;
+}
+
+export interface FreeWindow {
+  id: string;
+  start: string; // ISO 8601
+  end: string;   // ISO 8601
+  durationMinutes: number;
+  startFormatted: string; // e.g. "09:00"
+  endFormatted: string;   // e.g. "10:30"
+  inPreferredWorkingHours?: boolean;
+  inPreferredFocusPeriod?: boolean;
+  preferredPeriodName?: string;
+}
+
+export interface SchedulingCandidateWindow {
+  window: FreeWindow;
+  taskDuration: number;
+  fit: 'exact' | 'comfortable' | 'tight';
+  score: number;
+  reasons: string[];
+}
+
+export type CalendarConnectionStatus =
+  | 'not_connected'
+  | 'connecting'
+  | 'connected'
+  | 'error'
+  | 'disconnected';
+
+export interface CalendarStatusResponse {
+  status: CalendarConnectionStatus;
+  connectedEmail?: string | null;
+  connectedAt?: string | null;
+  lastSync?: string | null;
+  selectedCalendarIds: string[];
+  calendarCount: number;
+  error?: string | null;
+}
+
+export interface AvailabilityResult {
+  date: string;
+  timezone: string;
+  blocks: AvailabilityBlock[];
+  freeWindows: FreeWindow[];
+  totalFreeMinutes: number;
+  totalBusyMinutes: number;
+  totalSleepMinutes: number;
+  totalCommitmentMinutes: number;
+  candidateWindowsForTasks?: Record<string, SchedulingCandidateWindow[]>;
+}
+
+// Multi-Agent Runtime Foundation (Day 5A)
+export type AgentCapability =
+  | 'planning'
+  | 'prioritization'
+  | 'memory'
+  | 'scheduling'
+  | 'analysis'
+  | 'review'
+  | 'recovery'
+  | 'inspection'
+  | 'testing'
+  | 'task_decomposition'
+  | 'sequencing'
+  | 'goal_alignment'
+  | 'schedule_awareness'
+  | 'urgency_analysis'
+  | 'impact_analysis'
+  | 'task_ranking'
+  | 'decision_support'
+  | 'memory_retrieval'
+  | 'memory_update'
+  | 'memory_creation'
+  | 'memory_deduplication'
+  | 'memory_lifecycle'
+  | 'context_recall'
+  | 'preference_detection';
+
+export type AgentStatus = 'idle' | 'running' | 'completed' | 'failed' | 'timeout';
+
+export type ExecutionLifecycleStatus =
+  | 'REQUESTED'
+  | 'CONTEXT_BUILDING'
+  | 'AGENT_SELECTED'
+  | 'RUNNING'
+  | 'RESULT_RECEIVED'
+  | 'COMPLETED'
+  | 'FAILED';
+
+export type AgentActionType =
+  | 'CREATE_TASK'
+  | 'UPDATE_TASK'
+  | 'SCHEDULE_TASK'
+  | 'UPDATE_GOAL'
+  | 'CREATE_PROJECT'
+  | 'SEND_NOTIFICATION'
+  | 'INSPECT_CONTEXT'
+  | 'MEMORY_CREATE'
+  | 'MEMORY_UPDATE'
+  | 'MEMORY_ARCHIVE'
+  | 'MEMORY_DELETE'
+  | 'MEMORY_RETRIEVE'
+  | 'MEMORY_IGNORE'
+  | 'MEMORY_REVIEW_REQUIRED';
+
+export type RiskLevel = 'low' | 'medium' | 'high';
+
+export interface AgentAction {
+  actionId: string;
+  type: AgentActionType;
+  description: string;
+  target: string;
+  parameters: Record<string, unknown>;
+  riskLevel: RiskLevel;
+  requiresConfirmation: boolean;
+  sourceAgentId: string;
+}
+
+export interface AgentError {
+  code: string;
+  message: string;
+  details?: unknown;
+}
+
+export interface AgentMetadata {
+  id: string;
+  name: string;
+  description: string;
+  version: string;
+  capabilities: AgentCapability[];
+  timeoutMs?: number;
+}
+
+export interface AgentTrace {
+  agentId: string;
+  executionId: string;
+  startTime: number;
+  endTime: number;
+  durationMs: number;
+  status: AgentStatus;
+  success: boolean;
+  confidence?: number;
+  warnings?: string[];
+  error?: AgentError;
+}
+
+export interface AgentResult<T = unknown> {
+  success: boolean;
+  agentId: string;
+  executionId: string;
+  output: T;
+  confidence?: number;
+  actions: AgentAction[];
+  warnings: string[];
+  errors: AgentError[];
+  metadata: Record<string, unknown>;
+  durationMs: number;
+}
+
+export interface OrchestrationResult {
+  success: boolean;
+  requestId: string;
+  executionId: string;
+  lifecycleStatus: ExecutionLifecycleStatus;
+  agentResults: AgentResult[];
+  proposedActions: AgentAction[];
+  traces: AgentTrace[];
+  summary: string;
+  durationMs: number;
+  error?: AgentError;
+}
+
+// Memory Domain Types (Day 5B.3)
+export type MemoryType =
+  | 'preference'
+  | 'goal_context'
+  | 'project_context'
+  | 'task_pattern'
+  | 'working_style'
+  | 'scheduling_preference'
+  | 'constraint'
+  | 'decision'
+  | 'instruction'
+  | 'fact'
+  | 'temporary_context'
+  | 'execution_context'
+  | 'learned_pattern';
+
+export type MemoryImportance = 'low' | 'medium' | 'high' | 'critical';
+export type MemoryStatus = 'active' | 'archived' | 'superseded' | 'deleted';
+export type MemorySource =
+  | 'user_confirmed'
+  | 'user_explicit'
+  | 'system_derived'
+  | 'agent_proposed'
+  | 'agent_inferred';
+export type MemorySensitivity = 'normal' | 'sensitive' | 'restricted';
+export type MemoryOperation =
+  | 'retrieve'
+  | 'create'
+  | 'update'
+  | 'archive'
+  | 'delete'
+  | 'ignore'
+  | 'review_required';
+
+export interface MemoryItem {
+  id: string;
+  userId: string;
+  type: MemoryType;
+  content: string;
+  importance: MemoryImportance;
+  confidence: number;
+  status: MemoryStatus;
+  source: MemorySource;
+  sourceReference: string;
+  sensitivity: MemorySensitivity;
+  tags: string[];
+  explicit: boolean;
+  createdAt: string;
+  updatedAt: string;
+  lastAccessedAt: string;
+  expiresAt?: string | null;
+  accessCount: number;
+  metadata?: Record<string, unknown>;
+}
+
+export type MemoryRecord = MemoryItem;
+
+export interface ScoredMemoryItem extends MemoryItem {
+  relevanceScore: number;
+  queryMatchScore: number;
+  freshnessScore: number;
+  matchReason?: string;
+}
+
+export interface ScoredMemoryItemSafe {
+  memoryId: string;
+  type: MemoryType;
+  content: string;
+  relevanceScore: number;
+  confidence: number;
+  explicit: boolean;
+  source: MemorySource;
+  importance?: MemoryImportance | number;
+  tags?: string[];
+}
+
+export interface MemoryConflictReport {
+  memoryIdA: string;
+  memoryIdB: string;
+  reason: string;
+  authoritativeMemoryId: string;
+  rationale: string;
+}
+
+export interface MemoryProposal {
+  operation: MemoryOperation;
+  targetMemoryId?: string;
+  type: MemoryType;
+  content: string;
+  importance: MemoryImportance;
+  confidence: number;
+  source: MemorySource;
+  sourceReference: string;
+  sensitivity: MemorySensitivity;
+  requiresConfirmation: boolean;
+  rationale: string;
+  conflictWithMemoryId?: string;
+  tags?: string[];
+  explicit?: boolean;
+}
+
+export interface MemoryAgentOutput {
+  primaryIntent: 'retrieve' | 'remember' | 'forget' | 'update' | 'ignore' | 'inspect';
+  retrievedMemories: ScoredMemoryItem[];
+  relevantMemories?: ScoredMemoryItemSafe[];
+  rankedMemories?: ScoredMemoryItemSafe[];
+  conflicts?: MemoryConflictReport[];
+  memorySummary?: string;
+  proposedMemories?: MemoryProposal[];
+  proposals: MemoryProposal[];
+  summary: string;
+  decisionExplanation: string;
+  confidence: number;
+  warnings?: string[];
+  reasoningSource: 'deterministic' | 'gemini_enhanced' | 'deterministic_fallback';
+  metadata?: Record<string, unknown>;
+}
+
+// Recovery Agent Types (Day 5C.3)
+export type FailureCategory =
+  | 'VALIDATION_FAILURE'
+  | 'AUTHORIZATION_FAILURE'
+  | 'RESOURCE_NOT_FOUND'
+  | 'RESOURCE_CONFLICT'
+  | 'TRANSIENT_FAILURE'
+  | 'TIMEOUT'
+  | 'RATE_LIMITED'
+  | 'DEPENDENCY_FAILURE'
+  | 'UNKNOWN_FAILURE';
+
+export type RecoveryStrategyType =
+  | 'retry_same_action'
+  | 'adjust_parameters'
+  | 'find_alternative'
+  | 'replan'
+  | 'ask_user'
+  | 'abort';
+
+export interface RecoveryAttemptRecord {
+  attemptNumber: number;
+  toolId?: string;
+  status: 'failed' | 'timeout';
+  failureCode: string;
+  durationMs?: number;
+  timestamp: string;
+}
+
+export interface RecoveryContext {
+  executionId: string;
+  actionId?: string;
+  toolId?: string;
+  actionType?: string;
+  sourceAgentId?: string;
+  failureCode: string;
+  failureMessage: string;
+  failedAt: string;
+  attemptNumber: number;
+  previousAttempts?: RecoveryAttemptRecord[];
+  actionDescription?: string;
+  actionParametersSafe?: Record<string, unknown>;
+  resourceContextSafe?: Record<string, unknown>;
+  userRequest?: string;
+}
+
+export interface RecoveryAnalysisResponse {
+  success: boolean;
+  executionId: string;
+  failureCategory: FailureCategory;
+  recoverable: boolean;
+  recommendedRecovery: RecoveryStrategyType;
+  confidence: number;
+  requiresUserInput: boolean;
+  rationale: string;
+  fingerprint: string;
+  proposedActions: any[];
+  warnings: string[];
+  summary: string;
+}
+
+
+

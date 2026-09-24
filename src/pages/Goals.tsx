@@ -3,368 +3,979 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
-import { 
-  Plus, 
-  Trash2, 
-  Target, 
-  Brain, 
-  ArrowRight, 
-  Sparkles, 
-  TrendingUp, 
-  TrendingDown, 
-  AlertTriangle, 
-  Activity, 
-  CheckCircle2, 
-  X,
-  RefreshCw,
-  Clock
+import React, { useState, useMemo } from 'react';
+import {
+  Target,
+  FolderKanban,
+  CheckCircle2,
+  Plus,
+  Trash2,
+  Archive,
+  Edit3,
+  Calendar,
+  Layers,
+  ListTodo,
+  TrendingUp,
+  AlertTriangle,
+  ArrowRight,
+  ExternalLink,
+  ChevronRight,
+  Filter,
+  Sparkles,
+  Check,
+  RotateCcw,
+  Clock3,
 } from 'lucide-react';
-import { Goal } from '../types';
+import { Goal, Project, GoalPriority, ProjectPriority, GoalStatus, ProjectStatus } from '../types';
+import { useGoalProject } from '../context/GoalProjectContext';
+import { useTasks } from '../context/TaskContext';
+import GoalModal from '../components/goals/GoalModal';
+import ProjectModal from '../components/goals/ProjectModal';
 
-interface GoalsProps {
-  goals: Goal[];
-  onAddGoal: (goal: Omit<Goal, 'id' | 'successProbability' | 'failureProbability' | 'predictedMilestoneDelay' | 'riskLevel' | 'aiRecoveryPlan' | 'reasoning'>) => void;
-  onUpdateGoal: (id: string, updates: Partial<Goal>) => void;
-  onDeleteGoal: (id: string) => void;
-  onRecalibrate: () => void;
-  isDark: boolean;
+interface GoalsPageProps {
+  onNavigateToTasks?: (filter?: { projectId?: string; goalId?: string }) => void;
+  isDark?: boolean;
 }
 
-export default function Goals({
-  goals,
-  onAddGoal,
-  onUpdateGoal,
-  onDeleteGoal,
-  onRecalibrate,
-  isDark
-}: GoalsProps) {
-  const [showAddForm, setShowAddForm] = React.useState(false);
-  const [title, setTitle] = React.useState('');
-  const [category, setCategory] = React.useState<'career' | 'technical' | 'project' | 'education'>('technical');
-  const [progress, setProgress] = React.useState(10);
-  const [targetDate, setTargetDate] = React.useState('2026-07-30');
-  
-  const [activeGoalId, setActiveGoalId] = React.useState<string | null>(null);
-  const [isCalibrating, setIsCalibrating] = React.useState(false);
+export default function Goals({ onNavigateToTasks, isDark = true }: GoalsPageProps) {
+  const {
+    goals,
+    projects,
+    loading,
+    error,
+    createGoal,
+    updateGoal,
+    deleteGoal,
+    completeGoal,
+    archiveGoal,
+    createProject,
+    updateProject,
+    deleteProject,
+    completeProject,
+    archiveProject,
+    getProjectDerivedProgress,
+    getGoalDerivedProgress,
+    getProjectTasks,
+    getGoalProjects,
+    getGoalTasks,
+  } = useGoalProject();
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!title.trim()) return;
-    onAddGoal({
-      title,
-      category,
-      progress,
-      targetDate
+  const { tasks } = useTasks();
+
+  // Navigation tab inside Strategic Layer: Goals vs Projects
+  const [activeTab, setActiveTab] = useState<'goals' | 'projects'>('goals');
+  const [statusFilter, setStatusFilter] = useState<'active' | 'completed' | 'archived' | 'all'>('active');
+
+  // Selected Goal for detailed project breakdown view
+  const [selectedGoalId, setSelectedGoalId] = useState<string | null>(null);
+
+  // Modals state
+  const [goalModalOpen, setGoalModalOpen] = useState(false);
+  const [editingGoal, setEditingGoal] = useState<Goal | null>(null);
+
+  const [projectModalOpen, setProjectModalOpen] = useState(false);
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [projectModalDefaultGoalId, setProjectModalDefaultGoalId] = useState<string | null>(null);
+
+  // Toast notifications
+  const [toast, setToast] = useState<string | null>(null);
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 3500);
+  };
+
+  // Filtered goals
+  const filteredGoals = useMemo(() => {
+    return goals.filter(g => {
+      if (statusFilter === 'all') return true;
+      return g.status === statusFilter;
     });
-    setTitle('');
-    setCategory('technical');
-    setProgress(10);
-    setTargetDate('2026-07-30');
-    setShowAddForm(false);
-  };
+  }, [goals, statusFilter]);
 
-  const triggerCalibrate = async () => {
-    setIsCalibrating(true);
-    await new Promise(resolve => setTimeout(resolve, 800));
-    onRecalibrate();
-    setIsCalibrating(false);
-  };
+  // Filtered projects
+  const filteredProjects = useMemo(() => {
+    return projects.filter(p => {
+      if (statusFilter === 'all') return true;
+      return p.status === statusFilter;
+    });
+  }, [projects, statusFilter]);
 
-  // Set first goal as selected if none is active
-  React.useEffect(() => {
-    if (goals.length > 0 && !activeGoalId) {
-      setActiveGoalId(goals[0].id);
+  // Keep selected goal synced
+  const activeSelectedGoal = useMemo(() => {
+    if (!selectedGoalId && filteredGoals.length > 0) {
+      return filteredGoals[0];
     }
-  }, [goals, activeGoalId]);
+    return goals.find(g => g.id === selectedGoalId) || (filteredGoals.length > 0 ? filteredGoals[0] : null);
+  }, [goals, selectedGoalId, filteredGoals]);
 
-  const activeGoal = goals.find(g => g.id === activeGoalId) || goals[0];
+  // Projects contributing to active selected goal
+  const selectedGoalProjects = useMemo(() => {
+    if (!activeSelectedGoal) return [];
+    return projects.filter(
+      p => p.goalId === activeSelectedGoal.id || (activeSelectedGoal.projectIds && activeSelectedGoal.projectIds.includes(p.id))
+    );
+  }, [projects, activeSelectedGoal]);
+
+  // Tasks contributing to active selected goal
+  const selectedGoalTasks = useMemo(() => {
+    if (!activeSelectedGoal) return [];
+    return getGoalTasks(activeSelectedGoal.id);
+  }, [activeSelectedGoal, getGoalTasks]);
+
+  // Handlers for Goal Actions
+  const handleOpenNewGoal = () => {
+    setEditingGoal(null);
+    setGoalModalOpen(true);
+  };
+
+  const handleOpenEditGoal = (goal: Goal, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setEditingGoal(goal);
+    setGoalModalOpen(true);
+  };
+
+  const handleCompleteGoal = async (goalId: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    try {
+      await completeGoal(goalId);
+      showToast('Goal marked as completed.');
+    } catch (err: any) {
+      showToast(err.message || 'Failed to complete goal.');
+    }
+  };
+
+  const handleArchiveGoal = async (goalId: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    try {
+      await archiveGoal(goalId);
+      showToast('Goal archived.');
+    } catch (err: any) {
+      showToast(err.message || 'Failed to archive goal.');
+    }
+  };
+
+  const handleDeleteGoal = async (goalId: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (window.confirm('Delete this goal? Contributing projects and tasks will remain safe and will simply become unassigned.')) {
+      try {
+        await deleteGoal(goalId);
+        showToast('Goal deleted.');
+        if (selectedGoalId === goalId) {
+          setSelectedGoalId(null);
+        }
+      } catch (err: any) {
+        showToast(err.message || 'Failed to delete goal.');
+      }
+    }
+  };
+
+  // Handlers for Project Actions
+  const handleOpenNewProject = (targetGoalId?: string | null) => {
+    setEditingProject(null);
+    setProjectModalDefaultGoalId(targetGoalId || activeSelectedGoal?.id || null);
+    setProjectModalOpen(true);
+  };
+
+  const handleOpenEditProject = (proj: Project, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setEditingProject(proj);
+    setProjectModalDefaultGoalId(proj.goalId || null);
+    setProjectModalOpen(true);
+  };
+
+  const handleRemoveProjectFromGoal = async (proj: Project, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    try {
+      await updateProject(proj.id, { goalId: null });
+      showToast(`Removed "${proj.name}" from goal.`);
+    } catch (err: any) {
+      showToast(err.message || 'Failed to update project.');
+    }
+  };
+
+  const handleCompleteProject = async (projId: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    try {
+      await completeProject(projId);
+      showToast('Project completed.');
+    } catch (err: any) {
+      showToast(err.message || 'Failed to complete project.');
+    }
+  };
+
+  const handleArchiveProject = async (projId: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    try {
+      await archiveProject(projId);
+      showToast('Project archived.');
+    } catch (err: any) {
+      showToast(err.message || 'Failed to archive project.');
+    }
+  };
+
+  const handleDeleteProject = async (projId: string, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (window.confirm('Delete this project? Associated tasks will NOT be deleted; they will remain available in your task list.')) {
+      try {
+        await deleteProject(projId);
+        showToast('Project deleted.');
+      } catch (err: any) {
+        showToast(err.message || 'Failed to delete project.');
+      }
+    }
+  };
 
   return (
     <div className="space-y-6">
-      
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-gray-800/20 pb-4">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <h2 className="text-lg font-bold font-space tracking-tight">Milestone Success Estimator</h2>
-            <span className="px-2 py-0.5 bg-violet-600/10 text-violet-400 border border-violet-500/20 font-mono text-[8px] font-bold rounded">PHASE 3 ACTIVE</span>
+      {/* Toast */}
+      {toast && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-xs font-medium text-slate-100 shadow-xl shadow-black/60 animate-in fade-in slide-in-from-bottom-2">
+          <CheckCircle2 size={16} className="text-emerald-400" />
+          <span>{toast}</span>
+        </div>
+      )}
+
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-800/80 pb-5">
+        <div>
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-2xl font-bold tracking-tight text-white">Strategic Layer</h1>
+            <span className="rounded-md border border-violet-500/20 bg-violet-500/10 px-2 py-0.5 text-[11px] font-semibold text-violet-300">
+              GOALS → PROJECTS → TASKS
+            </span>
           </div>
-          <p className="text-xs text-gray-400">
-            Mapping progress metrics against systemic task flows to predict deadline completions and construct fail-safe correction paths.
+          <p className="mt-1 text-sm text-slate-400">
+            Understand not just what you are executing today, but <span className="text-slate-200 font-medium">why it matters</span> and how it drives long-term outcomes.
           </p>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2.5 shrink-0">
           <button
-            onClick={triggerCalibrate}
-            disabled={isCalibrating}
-            className={`px-3.5 py-1.5 rounded-xl border border-gray-800 text-[10px] font-mono font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer hover:bg-gray-800/10 ${
-              isCalibrating ? 'opacity-50' : ''
-            }`}
+            onClick={() => handleOpenNewProject()}
+            className="flex items-center gap-1.5 rounded-xl border border-slate-800 bg-slate-900 px-3.5 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-800 hover:text-white transition cursor-pointer"
           >
-            <RefreshCw size={12} className={isCalibrating ? 'animate-spin' : ''} />
-            {isCalibrating ? 'Calibrating...' : 'Evaluate Targets'}
+            <FolderKanban size={14} className="text-indigo-400" />
+            <span>New Project</span>
           </button>
-          
           <button
-            onClick={() => setShowAddForm(!showAddForm)}
-            className="px-3.5 py-1.5 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white rounded-xl text-[10px] font-bold font-mono uppercase tracking-wider flex items-center gap-1.5 cursor-pointer shadow-md"
+            onClick={handleOpenNewGoal}
+            className="flex items-center gap-1.5 rounded-xl bg-violet-600 px-4 py-2 text-xs font-semibold text-white shadow-md shadow-violet-900/30 hover:bg-violet-500 transition cursor-pointer"
           >
-            <Plus size={12} className="stroke-[2.5]" />
-            New Goal
+            <Plus size={14} className="stroke-[2.5]" />
+            <span>New Goal</span>
           </button>
         </div>
       </div>
 
-      {/* Add Form */}
-      {showAddForm && (
-        <form onSubmit={handleSubmit} className={`p-5 rounded-2xl border space-y-4 animate-in fade-in slide-in-from-top-4 duration-300 ${
-          isDark ? 'bg-slate-900/60 border-gray-900' : 'bg-white border-gray-200'
-        }`}>
-          <h3 className="text-xs font-bold uppercase font-mono tracking-widest text-gray-400 flex items-center gap-1.5 pb-2 border-b border-gray-800/10">
-            <Sparkles size={12} className="text-violet-400" /> Establish Goal Milestone
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-            <div className="md:col-span-6 space-y-1">
-              <label className="text-[10px] font-mono text-gray-500 uppercase font-bold">Goal Specification</label>
-              <input
-                type="text"
-                required
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="e.g. Master Vertex AI Tuning Models"
-                className={`w-full px-3 py-2 rounded-xl text-xs border focus:outline-none focus:ring-1 focus:ring-violet-500 ${
-                  isDark ? 'bg-gray-950 border-gray-800 text-white' : 'bg-gray-50 border-gray-200'
-                }`}
-              />
-            </div>
-            <div className="md:col-span-3 space-y-1">
-              <label className="text-[10px] font-mono text-gray-500 uppercase font-bold">Category</label>
-              <select
-                value={category}
-                onChange={(e: any) => setCategory(e.target.value)}
-                className={`w-full px-3 py-2 rounded-xl text-xs border focus:outline-none focus:ring-1 focus:ring-violet-500 ${
-                  isDark ? 'bg-gray-950 border-gray-800 text-white' : 'bg-gray-50 border-gray-200'
-                }`}
-              >
-                <option value="technical">Technical Training</option>
-                <option value="career">Career Trajectory</option>
-                <option value="project">Project Deliverable</option>
-                <option value="education">Academic Milestone</option>
-              </select>
-            </div>
-            <div className="md:col-span-3 space-y-1">
-              <label className="text-[10px] font-mono text-gray-500 uppercase font-bold">Target Deadline</label>
-              <input
-                type="date"
-                required
-                value={targetDate}
-                onChange={(e) => setTargetDate(e.target.value)}
-                className={`w-full px-3 py-2 rounded-xl text-xs border focus:outline-none focus:ring-1 focus:ring-violet-500 ${
-                  isDark ? 'bg-gray-950 border-gray-800 text-white' : 'bg-gray-50 border-gray-200'
-                }`}
-              />
-            </div>
-          </div>
+      {/* Sub-navigation Tabs & Status Filter */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-800/60 pb-3">
+        <div className="flex items-center gap-1 bg-slate-900/60 p-1 rounded-xl border border-slate-800">
+          <button
+            onClick={() => setActiveTab('goals')}
+            className={`flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition ${
+              activeTab === 'goals'
+                ? 'bg-violet-600 text-white shadow-sm'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+            }`}
+          >
+            <Target size={14} />
+            <span>Strategic Goals</span>
+            <span className="ml-1 rounded-full bg-black/30 px-1.5 py-0.2 text-[10px]">
+              {goals.filter(g => g.status === 'active').length}
+            </span>
+          </button>
 
-          <div className="space-y-1">
-            <div className="flex justify-between text-[10px] font-mono text-gray-500 uppercase font-bold">
-              <span>Initial Progress</span>
-              <span>{progress}%</span>
-            </div>
-            <input
-              type="range"
-              min="0"
-              max="99"
-              value={progress}
-              onChange={(e) => setProgress(parseInt(e.target.value))}
-              className="w-full accent-violet-600 h-1 bg-slate-950 rounded-lg cursor-pointer"
-            />
-          </div>
-
-          <div className="flex justify-end gap-2 pt-2">
-            <button
-              type="button"
-              onClick={() => setShowAddForm(false)}
-              className="px-4 py-2 border border-gray-800 hover:bg-gray-800/10 text-gray-400 text-[10px] font-mono font-bold uppercase rounded-xl cursor-pointer"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="px-4 py-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white text-[10px] font-mono font-bold uppercase rounded-xl cursor-pointer shadow-md"
-            >
-              Create Goal
-            </button>
-          </div>
-        </form>
-      )}
-
-      {/* Main Goal Panel Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        
-        {/* Left Column: Goals List Feed (Col Span 5) */}
-        <div className="lg:col-span-5 space-y-3 max-h-[500px] overflow-y-auto pr-1">
-          {goals.map((g) => {
-            const isActive = g.id === activeGoalId;
-            return (
-              <div
-                key={g.id}
-                onClick={() => setActiveGoalId(g.id)}
-                className={`p-4 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between h-28 relative overflow-hidden ${
-                  isActive 
-                    ? 'bg-violet-600/10 border-violet-500/30 shadow-md shadow-violet-500/5' 
-                    : (isDark ? 'bg-slate-900/30 border-gray-900/50 hover:border-gray-800' : 'bg-white border-gray-150 shadow-sm')
-                }`}
-              >
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[8px] font-mono font-bold text-gray-500 uppercase tracking-widest">
-                      {g.category}
-                    </span>
-                    <span className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded uppercase ${
-                      g.riskLevel === 'low' ? 'bg-emerald-500/10 text-emerald-400' :
-                      g.riskLevel === 'medium' ? 'bg-amber-500/10 text-amber-400' : 'bg-red-500/10 text-red-400'
-                    }`}>
-                      {g.riskLevel} Risk
-                    </span>
-                  </div>
-                  <h4 className="text-xs font-bold truncate max-w-[210px] text-gray-200">
-                    {g.title}
-                  </h4>
-                </div>
-
-                <div className="space-y-1.5 pt-2">
-                  <div className="flex justify-between text-[9px] font-mono text-gray-400">
-                    <span>Progress: {g.progress}%</span>
-                    <span className="font-bold text-emerald-400">P(Success): {g.successProbability}%</span>
-                  </div>
-                  <div className="w-full h-1 bg-slate-950 rounded-full overflow-hidden border border-gray-800/10">
-                    <div className="h-full bg-violet-500 rounded-full" style={{ width: `${g.progress}%` }} />
-                  </div>
-                </div>
-
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDeleteGoal(g.id);
-                  }}
-                  className="absolute bottom-2.5 right-2.5 p-1 hover:bg-red-500/15 rounded text-red-400 shrink-0 transition-all cursor-pointer"
-                  title="Purge goal milestone"
-                >
-                  <Trash2 size={11} />
-                </button>
-              </div>
-            );
-          })}
+          <button
+            onClick={() => setActiveTab('projects')}
+            className={`flex items-center gap-2 rounded-lg px-3.5 py-1.5 text-xs font-semibold transition ${
+              activeTab === 'projects'
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+            }`}
+          >
+            <FolderKanban size={14} />
+            <span>All Projects</span>
+            <span className="ml-1 rounded-full bg-black/30 px-1.5 py-0.2 text-[10px]">
+              {projects.filter(p => p.status === 'active').length}
+            </span>
+          </button>
         </div>
 
-        {/* Right Column: Interactive Prediction Dashboard & AI Recovery (Col Span 7) */}
-        <div className="lg:col-span-7">
-          {activeGoal ? (
-            <div className={`p-5 rounded-2xl border flex flex-col justify-between h-full space-y-5 ${
-              isDark ? 'bg-slate-900/30 border-gray-900' : 'bg-white border-gray-150 shadow-sm'
-            }`}>
-              
-              {/* Header Details */}
-              <div className="border-b border-gray-800/15 pb-3">
-                <div className="flex items-center justify-between text-[9px] font-mono text-gray-500">
-                  <span className="uppercase tracking-widest">Active Forecast Dashboard</span>
-                  <span>Target: {new Date(activeGoal.targetDate).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-                </div>
-                <h3 className="text-sm font-bold text-gray-100 font-space tracking-tight mt-1">
-                  {activeGoal.title}
-                </h3>
+        {/* Status Filter */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-slate-500 flex items-center gap-1">
+            <Filter size={12} /> Status:
+          </span>
+          <div className="flex items-center gap-1 text-xs">
+            {(['active', 'completed', 'archived', 'all'] as const).map(s => (
+              <button
+                key={s}
+                onClick={() => setStatusFilter(s)}
+                className={`rounded-lg px-2.5 py-1 capitalize text-xs font-medium transition ${
+                  statusFilter === s
+                    ? 'bg-slate-800 text-white border border-slate-700'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                }`}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* VIEW: STRATEGIC GOALS */}
+      {activeTab === 'goals' && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* Left Column: Goals List (Col 5) */}
+          <div className="lg:col-span-5 space-y-3">
+            <div className="flex items-center justify-between pb-1">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                Target Outcomes ({filteredGoals.length})
+              </span>
+              <span className="text-[11px] text-slate-500">
+                Sorted by priority & deadline
+              </span>
+            </div>
+
+            {loading ? (
+              <div className="p-8 text-center text-xs text-slate-400 animate-pulse">
+                Loading strategic goals…
               </div>
-
-              {/* Quantified Outcomes */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="p-3.5 bg-slate-950/20 rounded-xl border border-gray-800/25 text-center">
-                  <span className="text-[9px] font-mono text-gray-500 uppercase font-bold flex items-center justify-center gap-1">
-                    <TrendingUp size={11} className="text-emerald-400" /> Predicted Success Probability
-                  </span>
-                  <span className="text-2xl font-bold font-mono text-emerald-400 mt-2 block">{activeGoal.successProbability}%</span>
+            ) : filteredGoals.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-slate-800 bg-slate-950/40 p-8 text-center">
+                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-500/10 text-violet-400 mb-3">
+                  <Target size={22} />
                 </div>
-                <div className="p-3.5 bg-slate-950/20 rounded-xl border border-gray-800/25 text-center">
-                  <span className="text-[9px] font-mono text-gray-500 uppercase font-bold flex items-center justify-center gap-1">
-                    <TrendingDown size={11} className="text-red-400" /> Predicted Failure Probability
-                  </span>
-                  <span className="text-2xl font-bold font-mono text-red-400 mt-2 block">{activeGoal.failureProbability}%</span>
-                </div>
+                <h3 className="text-sm font-semibold text-slate-200">No goals yet.</h3>
+                <p className="mt-1 text-xs text-slate-400 max-w-xs mx-auto">
+                  Establish high-level objectives to align your projects and daily execution toward clear outcomes.
+                </p>
+                <button
+                  onClick={handleOpenNewGoal}
+                  className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-violet-600 px-4 py-2 text-xs font-semibold text-white shadow-md shadow-violet-900/30 hover:bg-violet-500 transition cursor-pointer"
+                >
+                  <Plus size={14} /> Establish First Goal
+                </button>
               </div>
+            ) : (
+              <div className="space-y-3 max-h-[750px] overflow-y-auto pr-1">
+                {filteredGoals.map(goal => {
+                  const isSelected = activeSelectedGoal?.id === goal.id;
+                  const derivedProgress = getGoalDerivedProgress(goal);
+                  const goalProjs = projects.filter(
+                    p => p.goalId === goal.id || (goal.projectIds && goal.projectIds.includes(p.id))
+                  );
+                  const goalTs = getGoalTasks(goal.id);
+                  const completedTs = goalTs.filter(t => t.status === 'completed');
 
-              {/* AI Reasoning Text */}
-              <div className="p-3 bg-slate-950/30 rounded-xl border border-gray-800/10 text-[11px] leading-relaxed text-gray-400 flex gap-2.5">
-                <Brain size={16} className="text-violet-400 shrink-0 mt-0.5 animate-pulse" />
-                <div>
-                  <span className="font-bold text-violet-300">Predictive Diagnostic:</span> {activeGoal.reasoning}
-                </div>
-              </div>
-
-              {/* Sentinel AI Recovery Plan */}
-              <div className={`p-4 rounded-xl border space-y-3 ${
-                activeGoal.riskLevel === 'high' || activeGoal.riskLevel === 'critical'
-                  ? (isDark ? 'bg-red-500/5 border-red-500/10' : 'bg-red-50 border-red-200')
-                  : (isDark ? 'bg-slate-950/40 border-gray-800' : 'bg-gray-50 border-gray-200')
-              }`}>
-                <div className="flex items-center justify-between text-[10px] font-mono border-b border-gray-800/10 pb-1.5">
-                  <span className="uppercase tracking-wider font-bold text-violet-400 flex items-center gap-1">
-                    <Activity size={12} /> Sentinel AI Fallback Recovery Plan
-                  </span>
-                  <span className={`font-bold uppercase text-[9px] ${
-                    activeGoal.riskLevel === 'low' ? 'text-emerald-400' : 'text-amber-400'
-                  }`}>
-                    {activeGoal.riskLevel === 'low' ? 'Status Secure' : 'Intervention Suggested'}
-                  </span>
-                </div>
-
-                <ul className="space-y-2 text-[11px] text-gray-300">
-                  {activeGoal.aiRecoveryPlan?.map((plan, pIdx) => (
-                    <li key={pIdx} className="flex gap-2">
-                      <span className="text-violet-400 font-mono font-bold">{pIdx + 1}.</span>
-                      <span>{plan}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              {/* CRUD Update Progress Slider */}
-              <div className="space-y-2 pt-2 border-t border-gray-800/15">
-                <div className="flex justify-between text-[10px] font-mono text-gray-500">
-                  <span>Modify Core Progress</span>
-                  <span>{activeGoal.progress}% Complete</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    value={activeGoal.progress}
-                    onChange={(e) => onUpdateGoal(activeGoal.id, { progress: parseInt(e.target.value) })}
-                    className="flex-1 accent-violet-600 h-1 bg-slate-950 rounded-lg cursor-pointer"
-                  />
-                  {activeGoal.progress < 100 && (
-                    <button
-                      onClick={() => onUpdateGoal(activeGoal.id, { progress: 100 })}
-                      className="px-2.5 py-1 bg-emerald-600/10 hover:bg-emerald-600/20 border border-emerald-500/20 text-emerald-400 font-mono text-[9px] font-bold uppercase rounded cursor-pointer transition-all"
+                  return (
+                    <div
+                      key={goal.id}
+                      onClick={() => setSelectedGoalId(goal.id)}
+                      className={`group relative rounded-2xl border p-4.5 transition cursor-pointer ${
+                        isSelected
+                          ? 'border-violet-500/40 bg-violet-600/10 shadow-lg shadow-violet-950/40'
+                          : 'border-slate-800/80 bg-slate-900/50 hover:border-slate-700 hover:bg-slate-900/80'
+                      }`}
                     >
-                      Complete
+                      {/* Priority and Status Badges */}
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                              goal.priority === 'critical'
+                                ? 'bg-rose-500/15 text-rose-400 border border-rose-500/20'
+                                : goal.priority === 'high'
+                                ? 'bg-amber-500/15 text-amber-400 border border-amber-500/20'
+                                : goal.priority === 'medium'
+                                ? 'bg-violet-500/15 text-violet-300 border border-violet-500/20'
+                                : 'bg-slate-800 text-slate-400 border border-slate-700'
+                            }`}
+                          >
+                            {goal.priority}
+                          </span>
+                          {goal.status !== 'active' && (
+                            <span className="rounded-md bg-slate-800 px-1.5 py-0.5 text-[10px] uppercase font-bold text-slate-400">
+                              {goal.status}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Quick Action Buttons */}
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={e => handleOpenEditGoal(goal, e)}
+                            title="Edit goal"
+                            className="p-1 text-slate-400 hover:text-white rounded hover:bg-slate-800"
+                          >
+                            <Edit3 size={13} />
+                          </button>
+                          {goal.status === 'active' && (
+                            <button
+                              onClick={e => handleCompleteGoal(goal.id, e)}
+                              title="Mark completed"
+                              className="p-1 text-emerald-400 hover:text-emerald-300 rounded hover:bg-emerald-500/10"
+                            >
+                              <Check size={13} />
+                            </button>
+                          )}
+                          <button
+                            onClick={e => handleArchiveGoal(goal.id, e)}
+                            title="Archive goal"
+                            className="p-1 text-slate-400 hover:text-slate-200 rounded hover:bg-slate-800"
+                          >
+                            <Archive size={13} />
+                          </button>
+                          <button
+                            onClick={e => handleDeleteGoal(goal.id, e)}
+                            title="Delete goal"
+                            className="p-1 text-rose-400 hover:text-rose-300 rounded hover:bg-rose-500/10"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Goal Title & Description */}
+                      <h3 className="text-sm font-semibold text-white leading-snug">
+                        {goal.title}
+                      </h3>
+                      {goal.description && (
+                        <p className="mt-1 text-xs text-slate-400 line-clamp-2">
+                          {goal.description}
+                        </p>
+                      )}
+
+                      {/* Progress Bar */}
+                      <div className="mt-3.5 space-y-1.5">
+                        <div className="flex items-center justify-between text-[11px] font-mono">
+                          <span className="text-slate-400">Progress</span>
+                          <span className="font-semibold text-violet-300">{derivedProgress}%</span>
+                        </div>
+                        <div className="h-1.5 w-full rounded-full bg-slate-950 overflow-hidden border border-slate-800/80">
+                          <div
+                            className={`h-full rounded-full transition-all duration-300 ${
+                              derivedProgress >= 100
+                                ? 'bg-emerald-400'
+                                : derivedProgress > 50
+                                ? 'bg-violet-400'
+                                : 'bg-indigo-500'
+                            }`}
+                            style={{ width: `${derivedProgress}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Metadata row: Target date, Projects, Tasks */}
+                      <div className="mt-3 flex items-center justify-between text-[11px] text-slate-400 pt-2 border-t border-slate-800/60">
+                        <div className="flex items-center gap-3">
+                          <span className="flex items-center gap-1">
+                            <FolderKanban size={12} className="text-indigo-400" />
+                            {goalProjs.length} {goalProjs.length === 1 ? 'project' : 'projects'}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <ListTodo size={12} className="text-violet-400" />
+                            {completedTs.length}/{goalTs.length} tasks
+                          </span>
+                        </div>
+
+                        {goal.targetDate && (
+                          <span className="flex items-center gap-1 text-slate-400">
+                            <Calendar size={11} />
+                            {new Date(goal.targetDate).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Right Column: Goal Detail & Contributing Projects (Col 7) */}
+          <div className="lg:col-span-7">
+            {activeSelectedGoal ? (
+              <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 space-y-6">
+                {/* Detail Header */}
+                <div className="space-y-3 border-b border-slate-800/80 pb-5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-600/20 text-violet-400 border border-violet-500/20">
+                        <Target size={16} />
+                      </span>
+                      <span className="text-xs font-mono font-bold uppercase tracking-wider text-slate-400">
+                        Strategic Goal Detail
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleOpenEditGoal(activeSelectedGoal)}
+                        className="flex items-center gap-1 rounded-lg border border-slate-800 bg-slate-950 px-2.5 py-1 text-xs text-slate-300 hover:bg-slate-800 transition"
+                      >
+                        <Edit3 size={12} /> Edit
+                      </button>
+                      {activeSelectedGoal.status === 'active' ? (
+                        <button
+                          onClick={() => handleCompleteGoal(activeSelectedGoal.id)}
+                          className="flex items-center gap-1 rounded-lg bg-emerald-600/10 border border-emerald-500/20 px-2.5 py-1 text-xs font-semibold text-emerald-400 hover:bg-emerald-600/20 transition"
+                        >
+                          <Check size={12} /> Mark Complete
+                        </button>
+                      ) : (
+                        <span className="rounded-lg bg-slate-800 px-2 py-1 text-xs text-slate-400 capitalize">
+                          {activeSelectedGoal.status}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <h2 className="text-xl font-bold text-white tracking-tight">
+                      {activeSelectedGoal.title}
+                    </h2>
+                    {activeSelectedGoal.description && (
+                      <p className="mt-1.5 text-xs text-slate-300 leading-relaxed">
+                        {activeSelectedGoal.description}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Summary Metric Cards */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+                    <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+                      <span className="text-[10px] font-mono uppercase text-slate-500">Overall Progress</span>
+                      <div className="text-lg font-bold font-mono text-violet-300 mt-1">
+                        {getGoalDerivedProgress(activeSelectedGoal)}%
+                      </div>
+                    </div>
+                    <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+                      <span className="text-[10px] font-mono uppercase text-slate-500">Priority</span>
+                      <div className="text-sm font-semibold capitalize text-slate-200 mt-1">
+                        {activeSelectedGoal.priority}
+                      </div>
+                    </div>
+                    <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+                      <span className="text-[10px] font-mono uppercase text-slate-500">Target Date</span>
+                      <div className="text-xs font-semibold text-slate-200 mt-1 truncate">
+                        {activeSelectedGoal.targetDate
+                          ? new Date(activeSelectedGoal.targetDate).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })
+                          : 'None set'}
+                      </div>
+                    </div>
+                    <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+                      <span className="text-[10px] font-mono uppercase text-slate-500">Task Velocity</span>
+                      <div className="text-xs font-semibold text-emerald-400 mt-1">
+                        {selectedGoalTasks.filter(t => t.status === 'completed').length} / {selectedGoalTasks.length} Done
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section: Contributing Projects */}
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                        <FolderKanban size={16} className="text-indigo-400" />
+                        <span>Projects Contributing to this Goal ({selectedGoalProjects.length})</span>
+                      </h3>
+                      <p className="text-xs text-slate-400">
+                        Initiatives translating this goal into executed task streams.
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={() => handleOpenNewProject(activeSelectedGoal.id)}
+                      className="flex items-center gap-1 rounded-xl bg-indigo-600/20 border border-indigo-500/30 px-3 py-1.5 text-xs font-semibold text-indigo-300 hover:bg-indigo-600/30 transition cursor-pointer"
+                    >
+                      <Plus size={13} /> Add Project
                     </button>
+                  </div>
+
+                  {selectedGoalProjects.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-slate-800 bg-slate-950/30 p-6 text-center">
+                      <FolderKanban size={20} className="mx-auto text-slate-500 mb-2" />
+                      <p className="text-xs text-slate-300 font-medium">This goal has no projects yet.</p>
+                      <p className="text-[11px] text-slate-500 mt-1 max-w-sm mx-auto">
+                        Link existing projects or create a dedicated project to begin tracking milestone progress automatically.
+                      </p>
+                      <button
+                        onClick={() => handleOpenNewProject(activeSelectedGoal.id)}
+                        className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-500 transition"
+                      >
+                        <Plus size={13} /> Create Project for this Goal
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {selectedGoalProjects.map(proj => {
+                        const projProgress = getProjectDerivedProgress(proj);
+                        const projTasks = getProjectTasks(proj.id);
+                        const completedTasks = projTasks.filter(t => t.status === 'completed');
+
+                        return (
+                          <div
+                            key={proj.id}
+                            className="rounded-xl border border-slate-800 bg-slate-950/50 p-4 space-y-3 hover:border-slate-700 transition"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <h4 className="text-xs font-semibold text-white">
+                                    {proj.name}
+                                  </h4>
+                                  <span
+                                    className={`rounded px-1.5 py-0.2 text-[9px] font-bold uppercase ${
+                                      proj.status === 'completed'
+                                        ? 'bg-emerald-500/10 text-emerald-400'
+                                        : proj.status === 'on_hold'
+                                        ? 'bg-amber-500/10 text-amber-400'
+                                        : 'bg-indigo-500/10 text-indigo-300'
+                                    }`}
+                                  >
+                                    {proj.status}
+                                  </span>
+                                </div>
+                                {proj.description && (
+                                  <p className="mt-1 text-[11px] text-slate-400">
+                                    {proj.description}
+                                  </p>
+                                )}
+                              </div>
+
+                              <div className="flex items-center gap-1 shrink-0">
+                                <button
+                                  onClick={e => handleOpenEditProject(proj, e)}
+                                  title="Edit or move project"
+                                  className="p-1 text-slate-400 hover:text-white rounded hover:bg-slate-800"
+                                >
+                                  <Edit3 size={12} />
+                                </button>
+                                <button
+                                  onClick={e => handleRemoveProjectFromGoal(proj, e)}
+                                  title="Remove from this goal (keeps project independent)"
+                                  className="p-1 text-slate-400 hover:text-amber-300 rounded hover:bg-amber-500/10"
+                                >
+                                  <RotateCcw size={12} />
+                                </button>
+                                <button
+                                  onClick={e => handleDeleteProject(proj.id, e)}
+                                  title="Delete project (keeps tasks)"
+                                  className="p-1 text-rose-400 hover:text-rose-300 rounded hover:bg-rose-500/10"
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Project Progress */}
+                            <div className="space-y-1">
+                              <div className="flex items-center justify-between text-[10px] font-mono">
+                                <span className="text-slate-400">
+                                  {completedTasks.length} / {projTasks.length} tasks completed
+                                </span>
+                                <span className="font-semibold text-indigo-300">{projProgress}%</span>
+                              </div>
+                              <div className="h-1.5 w-full rounded-full bg-slate-900 overflow-hidden border border-slate-800">
+                                <div
+                                  className="h-full bg-indigo-500 rounded-full transition-all duration-300"
+                                  style={{ width: `${projProgress}%` }}
+                                />
+                              </div>
+                            </div>
+
+                            {/* Actions row: View tasks */}
+                            <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1">
+                              <span className="flex items-center gap-1">
+                                {proj.targetDate && (
+                                  <>
+                                    <Clock3 size={11} /> Target: {new Date(proj.targetDate).toLocaleDateString()}
+                                  </>
+                                )}
+                              </span>
+                              {onNavigateToTasks && (
+                                <button
+                                  onClick={() => onNavigateToTasks({ projectId: proj.id })}
+                                  className="flex items-center gap-1 text-indigo-400 hover:text-indigo-300 font-medium cursor-pointer"
+                                >
+                                  <span>View Project Tasks</span>
+                                  <ChevronRight size={12} />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   )}
                 </div>
-              </div>
 
+                {/* Section: Active Tasks Contributing */}
+                {selectedGoalTasks.length > 0 && (
+                  <div className="space-y-3 pt-4 border-t border-slate-800/80">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                        <ListTodo size={14} className="text-violet-400" />
+                        <span>Contributing Task Streams ({selectedGoalTasks.length})</span>
+                      </h4>
+                      {onNavigateToTasks && (
+                        <button
+                          onClick={() => onNavigateToTasks({ goalId: activeSelectedGoal.id })}
+                          className="text-xs font-semibold text-violet-400 hover:text-violet-300 flex items-center gap-1 cursor-pointer"
+                        >
+                          <span>Open in Tasks</span>
+                          <ExternalLink size={12} />
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                      {selectedGoalTasks.slice(0, 5).map(task => (
+                        <div
+                          key={task.id}
+                          className="flex items-center justify-between rounded-lg border border-slate-800/60 bg-slate-950/40 px-3 py-2 text-xs"
+                        >
+                          <div className="flex items-center gap-2 truncate">
+                            <span
+                              className={`h-2 w-2 rounded-full ${
+                                task.status === 'completed'
+                                  ? 'bg-emerald-400'
+                                  : task.priority === 'urgent'
+                                  ? 'bg-rose-500'
+                                  : 'bg-violet-400'
+                              }`}
+                            />
+                            <span
+                              className={`truncate font-medium ${
+                                task.status === 'completed' ? 'line-through text-slate-500' : 'text-slate-200'
+                              }`}
+                            >
+                              {task.title}
+                            </span>
+                          </div>
+                          <span className="text-[10px] font-mono text-slate-500 capitalize shrink-0">
+                            {task.status}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-dashed border-slate-800 bg-slate-950/30 p-12 text-center text-slate-500 text-xs">
+                Select a goal to view contributing projects, milestone breakdown, and execution metrics.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* VIEW: ALL PROJECTS (INDEPENDENT ACCESS - Requirement 10) */}
+      {activeTab === 'projects' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-base font-semibold text-white flex items-center gap-2">
+                <FolderKanban size={18} className="text-indigo-400" />
+                <span>All Projects ({filteredProjects.length})</span>
+              </h2>
+              <p className="text-xs text-slate-400">
+                Manage initiatives independently or link them to high-level strategic goals.
+              </p>
+            </div>
+
+            <button
+              onClick={() => handleOpenNewProject()}
+              className="flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-md shadow-indigo-900/30 hover:bg-indigo-500 transition cursor-pointer"
+            >
+              <Plus size={14} /> New Project
+            </button>
+          </div>
+
+          {filteredProjects.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-800 bg-slate-950/40 p-10 text-center">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-500/10 text-indigo-400 mb-3">
+                <FolderKanban size={22} />
+              </div>
+              <h3 className="text-sm font-semibold text-slate-200">No projects yet.</h3>
+              <p className="mt-1 text-xs text-slate-400 max-w-sm mx-auto">
+                Create a project to cluster tasks, track deterministic completion velocity, and organize work streams.
+              </p>
+              <button
+                onClick={() => handleOpenNewProject()}
+                className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-500 transition cursor-pointer"
+              >
+                <Plus size={14} /> Create First Project
+              </button>
             </div>
           ) : (
-            <div className="h-full flex flex-col items-center justify-center text-center text-gray-500 text-xs py-12">
-              Select or establish a goal milestone to initiate active predictive forecasts.
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredProjects.map(proj => {
+                const parentGoal = goals.find(g => g.id === proj.goalId);
+                const projTasks = getProjectTasks(proj.id);
+                const completedTasks = projTasks.filter(t => t.status === 'completed');
+                const progress = getProjectDerivedProgress(proj);
+
+                return (
+                  <div
+                    key={proj.id}
+                    className="group rounded-2xl border border-slate-800 bg-slate-900/60 p-5 space-y-4 hover:border-slate-700 hover:bg-slate-900/90 transition flex flex-col justify-between"
+                  >
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                              proj.priority === 'critical'
+                                ? 'bg-rose-500/15 text-rose-400 border border-rose-500/20'
+                                : proj.priority === 'high'
+                                ? 'bg-amber-500/15 text-amber-400 border border-amber-500/20'
+                                : 'bg-slate-800 text-slate-300 border border-slate-700'
+                            }`}
+                          >
+                            {proj.priority || 'Normal'}
+                          </span>
+                          <span className="rounded bg-slate-800/80 px-1.5 py-0.5 text-[10px] uppercase font-bold text-slate-400">
+                            {proj.status}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={e => handleOpenEditProject(proj, e)}
+                            title="Edit Project"
+                            className="p-1 text-slate-400 hover:text-white rounded hover:bg-slate-800"
+                          >
+                            <Edit3 size={13} />
+                          </button>
+                          {proj.status === 'active' && (
+                            <button
+                              onClick={e => handleCompleteProject(proj.id, e)}
+                              title="Complete Project"
+                              className="p-1 text-emerald-400 hover:text-emerald-300 rounded hover:bg-emerald-500/10"
+                            >
+                              <Check size={13} />
+                            </button>
+                          )}
+                          <button
+                            onClick={e => handleArchiveProject(proj.id, e)}
+                            title="Archive Project"
+                            className="p-1 text-slate-400 hover:text-slate-200 rounded hover:bg-slate-800"
+                          >
+                            <Archive size={13} />
+                          </button>
+                          <button
+                            onClick={e => handleDeleteProject(proj.id, e)}
+                            title="Delete Project (tasks remain)"
+                            className="p-1 text-rose-400 hover:text-rose-300 rounded hover:bg-rose-500/10"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </div>
+
+                      <h3 className="text-sm font-semibold text-white">
+                        {proj.name}
+                      </h3>
+                      {proj.description && (
+                        <p className="text-xs text-slate-400 line-clamp-2">
+                          {proj.description}
+                        </p>
+                      )}
+
+                      {/* Parent Goal Alignment */}
+                      <div className="pt-1">
+                        {parentGoal ? (
+                          <div className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600/10 border border-violet-500/20 px-2 py-1 text-[11px] text-violet-300 font-medium">
+                            <Target size={11} className="text-violet-400" />
+                            <span className="truncate max-w-[200px]">Goal: {parentGoal.title}</span>
+                          </div>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[11px] text-slate-500 italic">
+                            Independent Project (No Goal)
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="space-y-3 pt-3 border-t border-slate-800/80">
+                      {/* Progress Bar */}
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-[11px] font-mono">
+                          <span className="text-slate-400">
+                            {completedTasks.length}/{projTasks.length} tasks
+                          </span>
+                          <span className="font-semibold text-indigo-300">{progress}%</span>
+                        </div>
+                        <div className="h-1.5 w-full rounded-full bg-slate-950 overflow-hidden border border-slate-800">
+                          <div
+                            className="h-full bg-indigo-500 rounded-full transition-all duration-300"
+                            style={{ width: `${progress}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Footer Info */}
+                      <div className="flex items-center justify-between text-[11px] text-slate-400">
+                        <span>
+                          {proj.targetDate ? `Due ${new Date(proj.targetDate).toLocaleDateString()}` : 'No deadline'}
+                        </span>
+                        {onNavigateToTasks && (
+                          <button
+                            onClick={() => onNavigateToTasks({ projectId: proj.id })}
+                            className="text-indigo-400 hover:text-indigo-300 font-medium flex items-center gap-1 cursor-pointer"
+                          >
+                            <span>Filter tasks</span>
+                            <ChevronRight size={12} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
+      )}
 
-      </div>
+      {/* Goal Creation/Editing Modal */}
+      <GoalModal
+        isOpen={goalModalOpen}
+        onClose={() => setGoalModalOpen(false)}
+        onSave={async data => {
+          if (editingGoal) {
+            await updateGoal(editingGoal.id, data);
+            showToast('Goal updated.');
+          } else {
+            await createGoal(data);
+            showToast('Strategic goal created.');
+          }
+        }}
+        initialGoal={editingGoal}
+      />
 
+      {/* Project Creation/Editing Modal */}
+      <ProjectModal
+        isOpen={projectModalOpen}
+        onClose={() => setProjectModalOpen(false)}
+        onSave={async data => {
+          if (editingProject) {
+            await updateProject(editingProject.id, data);
+            showToast('Project updated.');
+          } else {
+            await createProject(data);
+            showToast('Project created.');
+          }
+        }}
+        initialProject={editingProject}
+        goals={goals}
+        defaultGoalId={projectModalDefaultGoalId}
+      />
     </div>
   );
 }

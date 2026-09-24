@@ -246,7 +246,7 @@ export default function AIWorkspace({
           <div className="space-y-2 text-[11px] text-gray-400">
             <div className="flex items-center justify-between">
               <span className="flex items-center gap-1.5"><CheckSquare size={12} /> Pending Tasks</span>
-              <span className="font-mono text-white font-bold">{tasks.filter(t => t.status !== 'done').length}</span>
+              <span className="font-mono text-white font-bold">{tasks.filter(t => t.status !== 'completed').length}</span>
             </div>
             <div className="flex items-center justify-between">
               <span className="flex items-center gap-1.5"><Target size={12} /> Target Goals</span>

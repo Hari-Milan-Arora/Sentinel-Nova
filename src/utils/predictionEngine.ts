@@ -13,11 +13,12 @@ export class PredictionEngine {
   
   // Model 1 & 2: Task Completion and Delay Risk
   public static calculateTaskPredictions(tasks: Task[], overallCompletionRate: number = 82): Task[] {
-    const priorityWeights: Record<string, number> = { low: 0.1, medium: 0.25, high: 0.45, critical: 0.65 };
+    const priorityWeights: Record<string, number> = { low: 0.1, medium: 0.25, high: 0.45, urgent: 0.65 };
     const difficultyWeights: Record<string, number> = { easy: 0.9, medium: 0.7, hard: 0.4 };
 
     return tasks.map(task => {
-      if (task.status === 'done') {
+      const isCompleted = task.status === 'completed';
+      if (isCompleted) {
         return {
           ...task,
           completionProbability: 100,
@@ -28,8 +29,20 @@ export class PredictionEngine {
       }
 
       const pw = priorityWeights[task.priority] || 0.3;
-      const dw = difficultyWeights[task.difficulty] || 0.6;
-      const daysRem = task.daysRemaining;
+      const dw = difficultyWeights[task.difficulty || 'medium'] || 0.6;
+      
+      let daysRem = task.daysRemaining;
+      if (daysRem === undefined || daysRem === null) {
+        if (task.dueDate) {
+          const now = new Date();
+          const due = new Date(task.dueDate + 'T23:59:59');
+          daysRem = Math.ceil((due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+        } else {
+          daysRem = 3;
+        }
+      }
+
+      const estimatedHours = task.estimatedHours !== undefined ? task.estimatedHours : (task.estimatedMinutes || 30) / 60;
 
       let prob = 0.5;
       let predictedDate = 'In jeopardy';
@@ -40,7 +53,7 @@ export class PredictionEngine {
         predictedDate = 'Overdue';
         risk = 'critical';
       } else {
-        const requiredVelocity = task.estimatedHours / daysRem;
+        const requiredVelocity = estimatedHours / Math.max(1, daysRem);
         // Optimal velocity is around 2-3 hours/day. Higher workloads decrease completion probability
         const velocityPenalty = Math.max(0, requiredVelocity - 4.0) * 0.15;
         const score = (overallCompletionRate / 100.0) * 0.4 + dw * 0.4 - pw * 0.1 - velocityPenalty;
@@ -50,7 +63,7 @@ export class PredictionEngine {
         prob = Math.max(0.08, Math.min(0.97, prob));
 
         // Predict completion date based on velocity
-        const expectedDays = Math.ceil(task.estimatedHours / Math.min(4, Math.max(1, requiredVelocity)));
+        const expectedDays = Math.ceil(estimatedHours / Math.min(4, Math.max(1, requiredVelocity)));
         predictedDate = `In ${expectedDays} day${expectedDays > 1 ? 's' : ''}`;
 
         // Classify Risk (Model 2)
@@ -65,7 +78,7 @@ export class PredictionEngine {
         completionProbability: Math.round(prob * 100),
         predictedCompletionDate: predictedDate,
         delayRisk: risk,
-        timeAllocationHours: Number((task.estimatedHours / Math.max(1, daysRem)).toFixed(1))
+        timeAllocationHours: Number((estimatedHours / Math.max(1, daysRem)).toFixed(1))
       };
     });
   }
@@ -203,7 +216,7 @@ export class PredictionEngine {
   // Model 7: Goal Success Predictor
   public static calculateGoalSuccess(goals: Goal[], tasks: Task[]): Goal[] {
     // Determine overall completion speed from tasks
-    const completedTasks = tasks.filter(t => t.status === 'done');
+    const completedTasks = tasks.filter(t => t.status === 'completed');
     const velocity = completedTasks.length > 0 ? (completedTasks.length / 7) : 0.4; // tasks per day
 
     return goals.map(goal => {
@@ -281,8 +294,8 @@ export class PredictionEngine {
 
   // Model 8 & 9: Productivity and Burnout Predictor
   public static calculateBurnoutAndProductivity(tasks: Task[]): BurnoutMetrics {
-    const highPriorityCount = tasks.filter(t => t.status !== 'done' && (t.priority === 'high' || t.priority === 'critical')).length;
-    const estWorkloadHours = tasks.filter(t => t.status !== 'done').reduce((acc, t) => acc + t.estimatedHours, 0);
+    const highPriorityCount = tasks.filter(t => t.status !== 'completed' && (t.priority === 'high' || t.priority === 'urgent')).length;
+    const estWorkloadHours = tasks.filter(t => t.status !== 'completed').reduce((acc, t) => acc + (t.estimatedHours !== undefined ? t.estimatedHours : (t.estimatedMinutes || 30) / 60), 0);
 
     // Compute burnout score
     let burnoutScore = Math.max(15, Math.min(98, Math.round(25 + (highPriorityCount * 8) + (estWorkloadHours * 0.8))));
@@ -350,8 +363,8 @@ export class PredictionEngine {
     const recs: { title: string; category: string; impact: number; priority: string; action: string; score: number }[] = [];
 
     // Derive from pending high priority tasks
-    tasks.filter(t => t.status !== 'done').forEach(t => {
-      let score = t.priority === 'critical' ? 95 : t.priority === 'high' ? 82 : 60;
+    tasks.filter(t => t.status !== 'completed').forEach(t => {
+      let score = t.priority === 'urgent' ? 95 : t.priority === 'high' ? 82 : 60;
       recs.push({
         title: `Work on '${t.title}'`,
         category: 'Task Management',
@@ -369,7 +382,7 @@ export class PredictionEngine {
         category: 'Milestone Shield',
         impact: 94,
         priority: 'critical',
-        action: `Review recovery plan: ${g.aiRecoveryPlan[1] || 'Optimize timeline'}`,
+        action: `Review recovery plan: ${g.aiRecoveryPlan?.[1] || 'Optimize timeline'}`,
         score: 110
       });
     });
