@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Plus,
   Search,
@@ -16,6 +17,7 @@ import {
   CheckSquare,
   FolderKanban,
   Target,
+  Sparkles,
 } from 'lucide-react';
 import { Task, TaskPriority, TaskStatus } from '../types';
 import { useTasks, CreateTaskInput } from '../context/TaskContext';
@@ -48,6 +50,7 @@ export default function Tasks({ initialProjectId, initialGoalId, onClearFilter }
     refreshTasks,
   } = useTasks();
 
+  const navigate = useNavigate();
   const { profile } = usePlanningProfile();
   const { projects, goals } = useGoalProject();
   const timezone = profile?.timezone || 'UTC';
@@ -303,6 +306,15 @@ export default function Tasks({ initialProjectId, initialGoalId, onClearFilter }
             className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-800 bg-slate-900 text-slate-400 hover:bg-slate-800 hover:text-white transition"
           >
             <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
+          </button>
+
+          <button
+            onClick={() => navigate('/app/nova')}
+            title="Ask Nova AI Chief of Staff"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-violet-500/40 bg-violet-950/40 px-3.5 py-2 text-xs font-semibold text-violet-300 hover:bg-violet-900/50 hover:text-white transition"
+          >
+            <Sparkles size={14} className="text-violet-400" />
+            <span>Ask Nova</span>
           </button>
 
           <button

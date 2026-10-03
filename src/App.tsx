@@ -61,7 +61,7 @@ export default function App() {
   const [toast, setToast] = React.useState<string | null>(null);
   const [tasksFilter, setTasksFilter] = React.useState<{ projectId?: string; goalId?: string } | null>(null);
 
-  const { tasks: realTasks, createTask, updateTask, deleteTask } = useTasks();
+  const { tasks: realTasks, createTask, updateTask, deleteTask, refreshTasks } = useTasks();
 
   const [rawGoals, setRawGoals] = React.useState<Goal[]>([
     {
@@ -254,7 +254,7 @@ export default function App() {
         />
       );
     }
-    if (activeTab === 'nova') return <AIWorkspace conversations={conversations} activeConversationId={activeConversationId} onSendMessage={handleSendMessage} onDeleteConversation={(id) => setConversations(prev => prev.filter(c => c.id !== id))} onSelectConversation={setActiveConversationId} onNewConversation={() => { const id = `conv_${Date.now()}`; setConversations(prev => [{ id, title: 'New planning session', createdAt: new Date().toISOString(), messages: [] }, ...prev]); setActiveConversationId(id); }} tasks={computedState.tasks} goals={computedState.goals} isDark={isDark} showToast={showToast} />;
+    if (activeTab === 'nova') return <AIWorkspace conversations={conversations} activeConversationId={activeConversationId} onSendMessage={handleSendMessage} onDeleteConversation={(id) => setConversations(prev => prev.filter(c => c.id !== id))} onSelectConversation={setActiveConversationId} onNewConversation={() => { const id = `conv_${Date.now()}`; setConversations(prev => [{ id, title: 'New planning session', createdAt: new Date().toISOString(), messages: [] }, ...prev]); setActiveConversationId(id); }} tasks={computedState.tasks} goals={computedState.goals} isDark={isDark} showToast={showToast} refreshTasks={refreshTasks} />;
     if (activeTab === 'insights') return <Analytics burnout={computedState.burnout} engineStats={computedState.engineStats} isDark={isDark} />;
     if (activeTab === 'career') return <CareerIntelligence career={computedState.career} onUpdateSkills={handleUpdateSkills} isDark={isDark} />;
     if (activeTab === 'resume') return <ResumeIntelligence resume={computedState.resume} onOptimize={() => showToast('Resume analysis refreshed')} isDark={isDark} />;

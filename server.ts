@@ -1749,6 +1749,19 @@ async function startServer() {
       res.json({
         success: workflow.state !== 'ABORTED' && workflow.state !== 'FAILED',
         workflow,
+        workflowId: workflow.workflowId,
+        state: workflow.state,
+        message: workflow.summary,
+        intent: workflow.intent,
+        recommendations: workflow.recommendationCard ? [workflow.recommendationCard] : [],
+        recommendationCard: workflow.recommendationCard || null,
+        actions: workflow.actions,
+        activeAction: workflow.activeAction || null,
+        confirmation: workflow.confirmationBinding || null,
+        confirmationBinding: workflow.confirmationBinding || null,
+        traceSummary: workflow.traces,
+        dayPlan: workflow.dayPlan || null,
+        ambiguousChoices: workflow.ambiguousChoices || null,
       });
     } catch (err: any) {
       console.error("POST /api/nova/workflow error:", err);
@@ -1781,6 +1794,12 @@ async function startServer() {
       res.json({
         success: workflow.state === 'COMPLETED' || workflow.state === 'AWAITING_CONFIRMATION',
         workflow,
+        workflowId: workflow.workflowId,
+        state: workflow.state,
+        message: workflow.summary,
+        executionResult: workflow.executionResult || null,
+        activeAction: workflow.activeAction || null,
+        confirmation: workflow.confirmationBinding || null,
       });
     } catch (err: any) {
       console.error("POST /api/nova/workflow/:workflowId/confirm error:", err);
@@ -1819,6 +1838,9 @@ async function startServer() {
       res.json({
         success: true,
         workflow,
+        workflowId: workflow.workflowId,
+        state: workflow.state,
+        message: workflow.summary,
       });
     } catch (err: any) {
       console.error("POST /api/nova/workflow/:workflowId/reject error:", err);
@@ -1851,6 +1873,12 @@ async function startServer() {
       res.json({
         success: workflow.state === 'AWAITING_CONFIRMATION',
         workflow,
+        workflowId: workflow.workflowId,
+        state: workflow.state,
+        message: workflow.summary,
+        activeAction: workflow.activeAction || null,
+        confirmation: workflow.confirmationBinding || null,
+        confirmationBinding: workflow.confirmationBinding || null,
       });
     } catch (err: any) {
       console.error("POST /api/nova/workflow/:workflowId/edit error:", err);

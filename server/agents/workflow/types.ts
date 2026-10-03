@@ -100,6 +100,42 @@ export interface ChiefOfStaffWorkflowContext {
   updatedAt: number;
   abortReason?: string;
   summary: string;
+  recommendationCard?: NovaRecommendationCard | null;
+  dayPlan?: NovaDayPlanBlock[] | null;
+  ambiguousChoices?: Array<{ id: string; title: string }> | null;
+}
+
+export interface NovaRecommendationAlternative {
+  taskId: string;
+  taskTitle: string;
+  strategy: string;
+  reason: string;
+}
+
+export interface NovaRecommendationCard {
+  taskId: string;
+  taskTitle: string;
+  priority: string;
+  estimatedEffortMinutes: number;
+  whyThisNow: string[];
+  confidence: number;
+  confidenceLevel: 'High' | 'Medium' | 'Low';
+  strategy: string;
+  alternatives: NovaRecommendationAlternative[];
+  rationale: string;
+}
+
+export interface NovaDayPlanBlock {
+  timeWindow: string; // e.g. "09:00–10:30"
+  taskId?: string;
+  taskTitle: string;
+  durationMinutes: number;
+  priority?: string;
+  goalTitle?: string;
+  projectTitle?: string;
+  reason: string;
+  confidence?: number;
+  isBuffer?: boolean;
 }
 
 export interface WorkflowStartRequest {

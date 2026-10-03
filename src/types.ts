@@ -3,11 +3,69 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+export type NovaMessageType =
+  | 'USER_MESSAGE'
+  | 'NOVA_MESSAGE'
+  | 'THINKING'
+  | 'RECOMMENDATION'
+  | 'ACTION_PROPOSAL'
+  | 'CONFIRMATION_REQUIRED'
+  | 'EXECUTION'
+  | 'SUCCESS'
+  | 'FAILURE'
+  | 'RECOVERY_PROPOSAL'
+  | 'SYSTEM_STATUS';
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'model';
   content: string;
   timestamp: string;
+  messageType?: NovaMessageType;
+  workflowId?: string;
+  recommendationCard?: {
+    taskId: string;
+    taskTitle: string;
+    priority: string;
+    estimatedEffortMinutes: number;
+    whyThisNow: string[];
+    confidence: number;
+    confidenceLevel: 'High' | 'Medium' | 'Low';
+    strategy: string;
+    alternatives: Array<{ taskId: string; taskTitle: string; strategy: string; reason: string }>;
+    rationale: string;
+  };
+  actionProposal?: {
+    actionId: string;
+    type: string;
+    description: string;
+    taskTitle?: string;
+    when?: string;
+    conflicts?: string;
+    reason?: string;
+    riskLevel: string;
+    parameters: Record<string, unknown>;
+  };
+  confirmationBinding?: {
+    bindingId: string;
+    actionId: string;
+    expiresAt: number;
+    parameterHash: string;
+    reviewerRiskLevel: string;
+  };
+  dayPlan?: Array<{
+    timeWindow: string;
+    taskId?: string;
+    taskTitle: string;
+    durationMinutes: number;
+    priority?: string;
+    reason: string;
+    confidence?: number;
+    isBuffer?: boolean;
+  }>;
+  ambiguousChoices?: Array<{ id: string; title: string }>;
+  executionStatus?: 'idle' | 'executing' | 'success' | 'failed' | 'rejected';
+  executionMessage?: string;
   agentSteps?: { agentId: string; name: string; durationMs: number }[];
   decisionTree?: {
     options: { name: string; chosen: boolean; confidence: number; pros: string[]; cons: string[] }[];

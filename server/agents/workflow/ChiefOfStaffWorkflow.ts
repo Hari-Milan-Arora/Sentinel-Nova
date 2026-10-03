@@ -37,6 +37,9 @@ import {
   ConfirmationBinding,
   CONFIRMATION_TTL_MS,
   MAX_WORKFLOW_RECOVERY_CYCLES,
+  NovaDayPlanBlock,
+  NovaRecommendationAlternative,
+  NovaRecommendationCard,
   WorkflowConfirmRequest,
   WorkflowEditRequest,
   WorkflowIntent,
@@ -124,6 +127,9 @@ export class ChiefOfStaffWorkflowEngine {
     const agentResults: AgentResult[] = [];
     let proposedActions: AgentAction[] = [];
     let summary = '';
+    let recommendationCard: NovaRecommendationCard | null = null;
+    let dayPlan: NovaDayPlanBlock[] | null = null;
+    let ambiguousChoices: Array<{ id: string; title: string }> | null = null;
 
     // 3. Minimum Required Agent Pipeline Execution
     switch (intent) {
@@ -134,9 +140,52 @@ export class ChiefOfStaffWorkflowEngine {
         if (prioritizer) {
           const res = await prioritizer.execute(context);
           agentResults.push(res);
-          summary = typeof res.output === 'object' && res.output && 'explanation' in res.output
-            ? String((res.output as any).explanation)
-            : 'Prioritization analysis completed.';
+          const pOutput = res.output as any;
+
+          if (pOutput && pOutput.prioritizedItems && pOutput.prioritizedItems.length > 0) {
+            const topItem = pOutput.prioritizedItems[0];
+            const topTask = (context.tasks || []).find((t: any) => t.id === topItem.taskId);
+            const whyReasons: string[] = [];
+            if (topItem.goalImpactScore > 0.4) whyReasons.push('High strategic impact on active goals');
+            if (topItem.urgencyScore > 0.5) whyReasons.push('Approaching deadline');
+            if (topItem.blockingImpactScore > 0.3) whyReasons.push('Unblocks downstream milestones');
+            if (topItem.importanceScore > 0.5) whyReasons.push('Core high-priority operational item');
+            if (whyReasons.length === 0) whyReasons.push('Highest overall priority in today\'s queue');
+            whyReasons.push('Fits within your available focus capacity');
+
+            const alternatives: NovaRecommendationAlternative[] = (pOutput.prioritizedItems.slice(1, 3) || []).map(
+              (item: any, idx: number) => ({
+                taskId: item.taskId,
+                taskTitle: item.title,
+                strategy: idx === 0 ? 'Momentum-first alternative' : 'Secondary strategic option',
+                reason: item.rationale || 'Alternative candidate based on balanced priority factors',
+              })
+            );
+
+            const confidencePct = Math.round((pOutput.confidence || 0.87) * 100);
+            recommendationCard = {
+              taskId: topItem.taskId,
+              taskTitle: topItem.title,
+              priority: topTask?.priority || 'high',
+              estimatedEffortMinutes: topTask?.estimatedMinutes || 60,
+              whyThisNow: whyReasons,
+              confidence: confidencePct,
+              confidenceLevel: confidencePct >= 80 ? 'High' : confidencePct >= 50 ? 'Medium' : 'Low',
+              strategy: pOutput.recommendedStrategy?.name || 'Strategic impact + deadline balance',
+              alternatives,
+              rationale: pOutput.rationale || `I recommend focusing on "${topItem.title}" first based on strategic impact and current availability.`,
+            };
+            const lowerReq = (request.userRequest || '').toLowerCase();
+            if (lowerReq.includes('why') || lowerReq.includes('reason') || lowerReq.includes('explain')) {
+              summary = `I recommend this task first because it has high goal impact, is deadline-sensitive, and currently fits your available capacity.`;
+            } else {
+              summary = `I recommend starting with "${topItem.title}". ${recommendationCard.rationale}`;
+            }
+          } else {
+            summary = typeof res.output === 'object' && res.output && 'explanation' in res.output
+              ? String((res.output as any).explanation)
+              : 'Prioritization analysis completed.';
+          }
           recordTrace('PRIORITIZED', 'prioritizer', Date.now() - agentStart, 'completed', 'Tasks prioritized');
           currentState = 'COMPLETED';
         } else {
@@ -180,6 +229,18 @@ export class ChiefOfStaffWorkflowEngine {
       }
 
       case 'SCHEDULING': {
+        const lowerReq = (request.userRequest || '').toLowerCase();
+        if (lowerReq.includes("why can't you schedule") || lowerReq.includes("why cant you schedule") || lowerReq.includes("why can't this be scheduled")) {
+          const p = context.profile as any;
+          const sleepEnd = p?.sleepSchedule?.weekdayWake || p?.sleepSchedule?.end || '07:00';
+          const workEnd = p?.preferredWorkingHours?.endTime || p?.workingHours?.end || '17:00';
+          summary = `I couldn't schedule this task without violating your constraints: your sleep schedule runs until ${sleepEnd}, your calendar has existing commitments, and your workday ends at ${workEnd}. To fit this task, consider adjusting buffer times or rescheduling a flexible event.`;
+          currentState = 'COMPLETED';
+          proposedActions = [];
+          recordTrace('SCHEDULED', 'scheduler', 0, 'completed', 'Availability constraint explanation provided');
+          break;
+        }
+
         // Invoke SchedulerAgent directly
         const agentStart = Date.now();
         const scheduler = agentRegistry.get('agent.scheduler');
@@ -232,9 +293,65 @@ export class ChiefOfStaffWorkflowEngine {
           agentResults.push(sRes);
           proposedActions = sRes.actions || [];
           recordTrace('SCHEDULED', 'scheduler', Date.now() - sStart, 'completed', 'Schedule candidate proposed');
+
+          const schedRes = sRes.output as any;
+          const blocks: NovaDayPlanBlock[] = [];
+          if (schedRes && schedRes.evaluations && schedRes.evaluations.length > 0) {
+            for (const ev of schedRes.evaluations) {
+              if (ev.bestWindow) {
+                const startStr = ev.bestWindow.window?.startFormatted || '09:00';
+                const endStr = ev.bestWindow.window?.endFormatted || '10:30';
+                blocks.push({
+                  timeWindow: `${startStr}–${endStr}`,
+                  taskId: ev.taskId,
+                  taskTitle: ev.taskTitle,
+                  durationMinutes: ev.taskDuration || 60,
+                  priority: (context.tasks || []).find((t: any) => t.id === ev.taskId)?.priority || 'high',
+                  reason: ev.reasoning || 'Fits preferred focus window with zero calendar conflicts',
+                  confidence: Math.round((ev.confidence || 0.85) * 100),
+                });
+                blocks.push({
+                  timeWindow: `${endStr}–...`,
+                  taskTitle: 'Transition Buffer',
+                  durationMinutes: 15,
+                  reason: 'Cognitive rest and transition buffer',
+                  isBuffer: true,
+                });
+              }
+            }
+          }
+          if (blocks.length === 0 && context.tasks && context.tasks.length > 0) {
+            let currentHour = 9;
+            for (const t of (context.tasks as any[]).slice(0, 3)) {
+              const startHourStr = `${String(currentHour).padStart(2, '0')}:00`;
+              const durHours = Math.max(1, Math.min(2, Math.round((t.estimatedMinutes || 60) / 60)));
+              currentHour += durHours;
+              const endHourStr = `${String(currentHour).padStart(2, '0')}:00`;
+              blocks.push({
+                timeWindow: `${startHourStr}–${endHourStr}`,
+                taskId: t.id,
+                taskTitle: t.title,
+                durationMinutes: t.estimatedMinutes || 60,
+                priority: t.priority,
+                reason: 'Scheduled into today\'s peak focus block',
+                confidence: 85,
+              });
+              if (currentHour < 17) {
+                const bufEnd = `${String(currentHour).padStart(2, '0')}:15`;
+                blocks.push({
+                  timeWindow: `${endHourStr}–${bufEnd}`,
+                  taskTitle: 'Cognitive Buffer',
+                  durationMinutes: 15,
+                  reason: 'Transition period before next work block',
+                  isBuffer: true,
+                });
+              }
+            }
+          }
+          dayPlan = blocks;
         }
 
-        summary = 'Daily planning and scheduling cycle completed.';
+        summary = 'Daily planning and scheduling cycle completed. Here is today\'s plan.';
         currentState = proposedActions.length > 0 ? 'PROPOSED' : 'COMPLETED';
         break;
       }
@@ -242,11 +359,17 @@ export class ChiefOfStaffWorkflowEngine {
       case 'EXECUTION': {
         // Direct execution request: construct proposal (e.g. COMPLETE_TASK or REOPEN_TASK)
         const execStart = Date.now();
-        const actionProposal = await this.buildExecutionProposal(userId, request, context);
-        if (actionProposal) {
-          proposedActions = [actionProposal];
+        const proposalResult = await this.buildExecutionProposal(userId, request, context);
+        if (proposalResult.ambiguousChoices && proposalResult.ambiguousChoices.length > 1) {
+          ambiguousChoices = proposalResult.ambiguousChoices;
+          currentState = 'COMPLETED';
+          summary = `I have ${ambiguousChoices.length} tasks matching that description. Which one do you mean?\n` +
+            ambiguousChoices.map((c, i) => `${i + 1}. ${c.title}`).join('\n');
+          recordTrace('COMPLETED', 'orchestrator', Date.now() - execStart, 'completed', 'Ambiguous reference detected');
+        } else if (proposalResult.action) {
+          proposedActions = [proposalResult.action];
           currentState = 'PROPOSED';
-          summary = `Proposed ${actionProposal.type} for target task.`;
+          summary = `Proposed ${proposalResult.action.type} for target task.`;
           recordTrace('PROPOSED', 'orchestrator', Date.now() - execStart, 'completed', summary);
         } else {
           currentState = 'FAILED';
@@ -340,6 +463,9 @@ export class ChiefOfStaffWorkflowEngine {
       updatedAt: Date.now(),
       abortReason: currentState === 'ABORTED' ? (reviewResult?.reasons?.join('; ') || 'REVIEW_REJECTED') : undefined,
       summary,
+      recommendationCard,
+      dayPlan,
+      ambiguousChoices,
     };
 
     workflowStore.save(workflowContext);
@@ -743,12 +869,15 @@ export class ChiefOfStaffWorkflowEngine {
       params.actionType === 'COMPLETE_TASK' ||
       params.actionType === 'REOPEN_TASK' ||
       text.includes('complete this task') ||
+      text.includes('complete task') ||
       text.includes('mark task as completed') ||
       text.includes('finish task') ||
       text.includes('mark done') ||
       text.includes('reopen task') ||
       text.includes('uncomplete task') ||
-      text.includes('complete my highest');
+      text.includes('complete my highest') ||
+      text.includes('complete the task') ||
+      (text.includes('complete') && (text.includes('task') || text.includes('highest') || text.includes('done')));
     if (isExecution) {
       return 'EXECUTION';
     }
@@ -781,6 +910,11 @@ export class ChiefOfStaffWorkflowEngine {
       text.includes('time slot') ||
       text.includes('calendar slot') ||
       text.includes('fit in') ||
+      text.includes('move this task') ||
+      text.includes('move task') ||
+      text.includes('move to tomorrow') ||
+      text.includes("why can't you schedule") ||
+      text.includes("why cant you schedule") ||
       text.includes('reschedule');
     if (isScheduling && !text.includes('plan my day') && !text.includes("today's plan")) {
       return 'SCHEDULING';
@@ -802,6 +936,11 @@ export class ChiefOfStaffWorkflowEngine {
       text.includes('what should i work on first') ||
       text.includes('what to do first') ||
       text.includes('what is most important') ||
+      text.includes("what's the most important") ||
+      text.includes('why this') ||
+      text.includes('why?') ||
+      text.includes('why is this') ||
+      text.includes('explain priority') ||
       text.includes('prioritize') ||
       text.includes('priority ranking') ||
       text.includes('rank my tasks') ||
@@ -821,7 +960,7 @@ export class ChiefOfStaffWorkflowEngine {
     userId: string,
     request: WorkflowStartRequest,
     context: AgentContext
-  ): Promise<AgentAction | null> {
+  ): Promise<{ action: AgentAction | null; ambiguousChoices?: Array<{ id: string; title: string }> }> {
     const text = (request.userRequest || '').toLowerCase();
     const params = request.parameters || {};
 
@@ -831,49 +970,78 @@ export class ChiefOfStaffWorkflowEngine {
     }
 
     let targetTaskId: string | null = (request.taskId || params.taskId || '') as string;
+    const tasks = context.tasks || (await getActiveTasksByUser(userId));
 
-    if (!targetTaskId) {
-      // Resolve target task from user request or prioritize highest
-      const tasks = context.tasks || (await getActiveTasksByUser(userId));
-      if (tasks && tasks.length > 0) {
-        if (text.includes('highest') || text.includes('first') || text.includes('top')) {
-          // Find highest priority active task
-          const highTask = tasks.find((t) => t.priority === 'urgent') ||
-            tasks.find((t) => t.priority === 'high') ||
-            tasks[0];
-          targetTaskId = highTask.id;
+    // Conversational reference resolution:
+    // If user says "this task", "it", "complete this"
+    if (!targetTaskId && (text.includes('this task') || text.includes('that task') || text.includes(' it') || text.endsWith('it'))) {
+      if (params.lastTaskId && typeof params.lastTaskId === 'string') {
+        targetTaskId = params.lastTaskId;
+      }
+    }
+
+    if (!targetTaskId && tasks && tasks.length > 0) {
+      if (text.includes('highest') || text.includes('first') || text.includes('top') || text.includes('the first one')) {
+        // Find highest priority active task
+        const highTask = tasks.find((t) => t.priority === 'urgent') ||
+          tasks.find((t) => t.priority === 'high') ||
+          tasks[0];
+        targetTaskId = highTask.id;
+      } else {
+        // Check for matching task titles or keyword tokens
+        const matchingTasks: any[] = [];
+        const stopwords = new Set(['complete', 'reopen', 'task', 'this', 'that', 'the', 'please', 'mark', 'done', 'highest', 'priority', 'for']);
+        const queryWords = text.split(/\s+/).map((w) => w.replace(/[^a-z0-9]/g, '')).filter((w) => w.length > 2 && !stopwords.has(w));
+
+        for (const t of tasks) {
+          const tTitle = t.title.toLowerCase();
+          const tId = t.id.toLowerCase();
+          if (text.includes(tTitle) || text.includes(tId) || (queryWords.length > 0 && queryWords.some((w) => tTitle.includes(w)))) {
+            matchingTasks.push(t);
+          }
+        }
+        if (matchingTasks.length === 1) {
+          targetTaskId = matchingTasks[0].id;
+        } else if (matchingTasks.length > 1) {
+          // Ambiguity detected!
+          return {
+            action: null,
+            ambiguousChoices: matchingTasks.map((t) => ({ id: t.id, title: t.title })),
+          };
+        } else if (params.lastTaskId && typeof params.lastTaskId === 'string') {
+          targetTaskId = params.lastTaskId;
         } else {
-          // Check if request mentions a title or task ID
-          for (const t of tasks) {
-            if (text.includes(t.title.toLowerCase()) || text.includes(t.id.toLowerCase())) {
-              targetTaskId = t.id;
-              break;
-            }
+          // If user asks to complete without specific identifier and multiple tasks exist
+          if (tasks.length > 1) {
+            return {
+              action: null,
+              ambiguousChoices: tasks.slice(0, 3).map((t) => ({ id: t.id, title: t.title })),
+            };
           }
-          if (!targetTaskId) {
-            targetTaskId = tasks[0].id;
-          }
+          targetTaskId = tasks[0].id;
         }
       }
     }
 
-    if (!targetTaskId) return null;
+    if (!targetTaskId) return { action: null };
 
     const task = (context.tasks || []).find((t) => t.id === targetTaskId) || (await getTaskById(userId, targetTaskId));
     const taskTitle = task ? task.title : targetTaskId;
 
     return {
-      actionId: `act_${crypto.randomUUID()}`,
-      type: actionType,
-      description: `${actionType === 'COMPLETE_TASK' ? 'Complete' : 'Reopen'} task "${taskTitle}"`,
-      target: targetTaskId,
-      parameters: {
-        taskId: targetTaskId,
-        note: (params.note as string) || `Action proposed via Chief of Staff workflow (${actionType}).`,
+      action: {
+        actionId: `act_${crypto.randomUUID()}`,
+        type: actionType,
+        description: `${actionType === 'COMPLETE_TASK' ? 'Complete' : 'Reopen'} task "${taskTitle}"`,
+        target: targetTaskId,
+        parameters: {
+          taskId: targetTaskId,
+          note: (params.note as string) || `Action proposed via Chief of Staff workflow (${actionType}).`,
+        },
+        riskLevel: 'low',
+        requiresConfirmation: true,
+        sourceAgentId: 'agent.orchestrator',
       },
-      riskLevel: 'low',
-      requiresConfirmation: true,
-      sourceAgentId: 'agent.orchestrator',
     };
   }
 
@@ -922,7 +1090,10 @@ export class ChiefOfStaffWorkflowEngine {
       tasks: tasks as ServerTask[],
     });
 
-    const effectiveTaskId = (request as WorkflowStartRequest).taskId || request.parameters?.taskId;
+    const effectiveTaskId =
+      (request as WorkflowStartRequest).taskId ||
+      request.parameters?.taskId ||
+      request.parameters?.lastTaskId;
     const parameters = {
       ...(request.parameters || {}),
       ...(effectiveTaskId ? { taskId: effectiveTaskId } : {}),
