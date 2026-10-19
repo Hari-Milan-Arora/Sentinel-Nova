@@ -1,5 +1,7 @@
 import fs from "fs";
 import path from "path";
+import crypto from "crypto";
+import { DATA_DIR } from './dataDirectory';
 
 export interface SleepSchedule {
   weekdaySleep: string;
@@ -28,6 +30,9 @@ export interface PreferredWorkingHours {
 
 export interface UserPlanningProfile {
   userId: string;
+  /** Explicit user consent for collecting minimal task prediction snapshots/outcomes. */
+  mlOutcomeCollectionEnabled?: boolean;
+  mlOutcomeCollectionOptedInAt?: string | null;
   onboardingCompleted: boolean;
   onboardingSkipped?: boolean;
   timezone: string;
@@ -44,7 +49,6 @@ export interface UserPlanningProfile {
   updatedAt: string;
 }
 
-const DATA_DIR = path.join(process.cwd(), "data");
 const PROFILES_FILE = path.join(DATA_DIR, "planning_profiles.json");
 
 // In-memory cache backed by JSON file persistence
@@ -53,9 +57,10 @@ let profilesCache: Record<string, UserPlanningProfile> | null = null;
 function ensureDataDir() {
   if (!fs.existsSync(DATA_DIR)) {
     try {
-      fs.mkdirSync(DATA_DIR, { recursive: true });
-    } catch (e) {
-      console.error("Could not create data directory:", e);
+      fs.mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
+      if (process.platform !== 'win32') fs.chmodSync(DATA_DIR, 0o700);
+    } catch {
+      console.error("Could not create data directory.");
     }
   }
 }
@@ -80,10 +85,25 @@ function loadProfiles(): Record<string, UserPlanningProfile> {
 
 async function persistProfiles() {
   ensureDataDir();
+  const tempFile = `${PROFILES_FILE}.${process.pid}.${crypto.randomUUID()}.tmp`;
   try {
-    await fs.promises.writeFile(PROFILES_FILE, JSON.stringify(profilesCache || {}, null, 2), "utf-8");
+    if (process.platform !== 'win32') await fs.promises.chmod(DATA_DIR, 0o700);
+    await fs.promises.writeFile(tempFile, JSON.stringify(profilesCache || {}, null, 2), { encoding: "utf-8", mode: 0o600, flag: "wx" });
+    await fs.promises.chmod(tempFile, 0o600);
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        await fs.promises.rename(tempFile, PROFILES_FILE);
+        break;
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (process.platform !== 'win32' || !['EPERM', 'EBUSY', 'ENOTEMPTY'].includes(code || '') || attempt >= 4) throw error;
+        await new Promise((resolve) => setTimeout(resolve, 25 * (attempt + 1)));
+      }
+    }
   } catch (e) {
-    console.error("Failed to persist profiles to disk:", e);
+    throw e;
+  } finally {
+    await fs.promises.rm(tempFile, { force: true }).catch(() => undefined);
   }
 }
 
@@ -138,6 +158,7 @@ export function validatePlanningProfile(data: any): { valid: boolean; errors: st
   if (!data) {
     return { valid: false, errors: ["Missing profile data."] };
   }
+
 
   // Sleep schedule validation
   if (!data.sleepSchedule) {
@@ -220,6 +241,8 @@ export async function savePlanningProfile(
 
   const profile: UserPlanningProfile = {
     userId,
+    mlOutcomeCollectionEnabled: existing?.mlOutcomeCollectionEnabled ?? false,
+    mlOutcomeCollectionOptedInAt: existing?.mlOutcomeCollectionOptedInAt ?? null,
     onboardingCompleted: data.onboardingSkipped
       ? false
       : (data.onboardingCompleted !== undefined
@@ -250,5 +273,33 @@ export async function savePlanningProfile(
 
   store[userId] = profile;
   await persistProfiles();
+  return profile;
+}
+
+/** Consent changes are isolated from generic planning-profile writes. */
+export async function setMlOutcomeCollectionPreference(userId: string, enabled: boolean): Promise<UserPlanningProfile> {
+  let profile = loadProfiles()[userId];
+  if (!profile) profile = await savePlanningProfile(userId, {});
+  const store = loadProfiles();
+  const previous = profile;
+  const now = new Date().toISOString();
+  profile = {
+    ...profile,
+    mlOutcomeCollectionEnabled: enabled,
+    mlOutcomeCollectionOptedInAt: enabled
+      ? (profile.mlOutcomeCollectionEnabled ? profile.mlOutcomeCollectionOptedInAt || now : now)
+      : null,
+    updatedAt: now,
+  };
+  store[userId] = profile;
+  try {
+    await persistProfiles();
+  } catch (error) {
+    // A failed opt-in must not enable collection from this process-local cache.
+    // On opt-out, keep the in-memory state disabled even if durable persistence
+    // failed; the endpoint returns an error so the caller knows durability failed.
+    if (enabled) store[userId] = previous;
+    throw error;
+  }
   return profile;
 }

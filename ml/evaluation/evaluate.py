@@ -1,77 +1,94 @@
-"""
-Model Evaluation and Drift Auditing Pipeline
-Measures statistical accuracies (Accuracy, Precision, Recall, F1) and alerts if prediction drift is detected.
-"""
+"""Re-evaluate the saved lead-time artifact on its reproducible chronological test split."""
 
-import sys
-import os
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+
 import numpy as np
+import pandas as pd
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+from ml.prediction_engine.task_lead_time import MODEL_VERSION, load_saved_model
+from ml.training.dataset import chronological_split, discover_dataset, prepare_dataset
+from ml.training.train import ROOT, _atomic_json, metrics
 
-from ml.prediction_engine.prediction_service import PredictionService
-from ml.datasets.synthetic_generator import SyntheticDatasetGenerator
 
-def evaluate_performance():
-    print("="*60)
-    print("SENTINEL NOVA: INDEPENDENT EVALUATION PIPELINE")
-    print("="*60)
-    
-    # 1. Load validation dataset
-    generator = SyntheticDatasetGenerator(seed=101) # different seed for unbiased testing
-    validation_records = generator.generate_task_telemetry(150)
-    
-    # 2. Extract true values and run predictions
-    true_completed = [r['completedOnTime'] for r in validation_records]
-    
+def evaluate_performance() -> dict:
+    """Legacy rule-generated diagnostic, explicitly not real-world evaluation."""
+    from ml.datasets.synthetic_generator import SyntheticDatasetGenerator
     from ml.prediction_engine.prediction_models import TaskCompletionModel
+
+    records = SyntheticDatasetGenerator(seed=101).generate_task_telemetry(150)
     model = TaskCompletionModel()
-    
-    predicted_probs = []
-    for r in validation_records:
-        res = model.predict(
-            priority=r['priority'],
-            est_hours=r['estimatedHours'],
-            past_rate=82.5, # standard baseline
-            days_rem=r['daysRemaining'],
-            difficulty=r['difficulty']
-        )
-        predicted_probs.append(res['probability'])
-        
-    # Apply binary classification threshold (0.50)
-    predictions = [p >= 0.50 for p in predicted_probs]
-    
-    # 3. Calculate Confusion Matrix
-    tp = sum(1 for p, t in zip(predictions, true_completed) if p and t)
-    fp = sum(1 for p, t in zip(predictions, true_completed) if p and not t)
-    fn = sum(1 for p, t in zip(predictions, true_completed) if not p and t)
-    tn = sum(1 for p, t in zip(predictions, true_completed) if not p and not t)
-    
-    accuracy = (tp + tn) / len(true_completed)
-    precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
-    recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
-    f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
-    
-    # Simulate drift computation: compare prediction distribution of validation set against training distribution
-    # If standard deviation or mean shift is > 10%, drift is flagged
-    mean_validation_prob = np.mean(predicted_probs)
-    training_baseline_mean = 0.72  # baseline from training set
-    drift_distance = abs(mean_validation_prob - training_baseline_mean)
-    drift_detected = drift_distance > 0.10
-    
-    print(f"Evaluated Records:      {len(true_completed)} telemetry events")
-    print(f"Accuracy Rate:          {accuracy:.4f} (94.2% expected)")
-    print(f"Classification Precision: {precision:.4f}")
-    print(f"Recall Rate:            {recall:.4f}")
-    print(f"Balanced F1-Score:      {f1:.4f}")
-    print(f"Prediction Drift Index: {drift_distance:.4f}")
-    
-    if drift_detected:
-        print("\n[WARNING] Prediction drift detected! Model recalibration highly recommended.")
-    else:
-        print("\n[SUCCESS] Feature distributions are stable. No prediction drift detected.")
-        
-    print("="*60)
+    actual = [bool(row["completedOnTime"]) for row in records]
+    predicted = [
+        model.predict(
+            priority=row["priority"],
+            est_hours=row["estimatedHours"],
+            past_rate=82.5,
+            days_rem=row["daysRemaining"],
+            difficulty=row["difficulty"],
+        )["probability"] >= 0.50
+        for row in records
+    ]
+    accuracy = sum(left == right for left, right in zip(actual, predicted)) / len(actual)
+    return {
+        "status": "synthetic_diagnostic_only",
+        "real_world_performance_estimated": False,
+        "metrics": {"accuracy": accuracy},
+        "warning": "Synthetic labels are generated from rules and are not validation of real-world performance.",
+    }
+
+
+def evaluate(dataset_path: Path, artifact_dir: Path, report_path: Path) -> dict:
+    prepared = prepare_dataset(dataset_path)
+    model, manifest = load_saved_model(artifact_dir)
+    if manifest["dataset"]["sha256"] != prepared.source_sha256:
+        raise ValueError("dataset_checksum_does_not_match_trained_artifact")
+
+    train_rows, validation_rows, test_rows = chronological_split(prepared.rows)
+    fit_rows = pd.concat([train_rows, validation_rows], axis=0)
+    y_test = test_rows["_lead_time_days"].to_numpy(dtype=float)
+    predictions = np.maximum(0.0, np.asarray(model.predict(test_rows[["Summary"]]), dtype=float))
+    baseline_value = float(fit_rows["_lead_time_days"].median())
+    results = {
+        "baseline_training_median": metrics(y_test, np.full(len(y_test), baseline_value)),
+        "trained_model": metrics(y_test, predictions),
+    }
+    report = {
+        "model_version": MODEL_VERSION,
+        "dataset_filename": prepared.source_path.name,
+        "dataset_sha256": prepared.source_sha256,
+        "target_name": manifest["target"]["name"],
+        "target_units": manifest["target"]["units"],
+        "split_method": manifest["split"]["method"],
+        "sample_counts": manifest["split"]["sample_counts"],
+        "test_metrics": results,
+        "beats_baseline_on_test_mae": bool(results["trained_model"]["mae_days"] < results["baseline_training_median"]["mae_days"]),
+        "artifact_sha256": manifest["artifact"]["sha256"],
+        "limitations": manifest["limitations"],
+    }
+    _atomic_json(report_path.resolve(), report)
+    return report
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--dataset", type=Path, default=None)
+    parser.add_argument("--artifact-dir", type=Path, default=ROOT / "ml" / "models")
+    parser.add_argument("--report", type=Path, default=ROOT / "ml" / "reports" / f"{MODEL_VERSION}-evaluation.json")
+    args = parser.parse_args()
+    dataset = args.dataset
+    if dataset is None:
+        workbooks = [p for p in discover_dataset(ROOT) if p.suffix.lower() in {".xlsx", ".xls"}]
+        if len(workbooks) != 1:
+            parser.error(f"Expected exactly one root-level Excel dataset; discovered {len(workbooks)}")
+        dataset = workbooks[0]
+    report = evaluate(dataset, args.artifact_dir, args.report)
+    print(json.dumps(report, indent=2))
+    return 0
+
 
 if __name__ == "__main__":
-    evaluate_performance()
+    raise SystemExit(main())

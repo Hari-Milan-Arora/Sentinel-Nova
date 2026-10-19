@@ -125,7 +125,7 @@ export interface ScoredMemoryItemSafe {
   type: MemoryType;
   content: string;
   relevanceScore: number;
-  confidence: number;
+  confidence?: number;
   explicit: boolean;
   source: MemorySource;
   importance?: MemoryImportance | number;
@@ -190,7 +190,7 @@ export interface MemoryAgentOutput {
   proposals: MemoryProposal[]; // Alias for backward compatibility
   summary: string;
   decisionExplanation: string;
-  confidence: number; // 0.0 - 1.0
+  confidence?: number; // unavailable unless a component can justify a calibrated value
   warnings: string[];
   reasoningSource: 'deterministic' | 'gemini_enhanced' | 'deterministic_fallback';
   metadata?: Record<string, unknown>;

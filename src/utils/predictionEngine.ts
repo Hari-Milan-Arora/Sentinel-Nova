@@ -12,7 +12,7 @@ import { Task, Goal, Project, Opportunity, CareerMetrics, ResumeMetrics, Burnout
 export class PredictionEngine {
   
   // Model 1 & 2: Task Completion and Delay Risk
-  public static calculateTaskPredictions(tasks: Task[], overallCompletionRate: number = 82): Task[] {
+  public static calculateTaskPredictions(tasks: Task[], overallCompletionRate?: number): Task[] {
     const priorityWeights: Record<string, number> = { low: 0.1, medium: 0.25, high: 0.45, urgent: 0.65 };
     const difficultyWeights: Record<string, number> = { easy: 0.9, medium: 0.7, hard: 0.4 };
 
@@ -24,7 +24,9 @@ export class PredictionEngine {
           completionProbability: 100,
           predictedCompletionDate: 'Completed',
           delayRisk: 'low',
-          timeAllocationHours: 0
+          timeAllocationHours: 0,
+          predictionSource: 'deterministic_heuristic',
+          predictionDataStatus: 'insufficient'
         };
       }
 
@@ -49,14 +51,17 @@ export class PredictionEngine {
       let risk: 'low' | 'medium' | 'high' | 'critical' = 'low';
 
       if (daysRem <= 0) {
-        prob = 0.05;
+        prob = 0;
         predictedDate = 'Overdue';
         risk = 'critical';
       } else {
         const requiredVelocity = estimatedHours / Math.max(1, daysRem);
         // Optimal velocity is around 2-3 hours/day. Higher workloads decrease completion probability
         const velocityPenalty = Math.max(0, requiredVelocity - 4.0) * 0.15;
-        const score = (overallCompletionRate / 100.0) * 0.4 + dw * 0.4 - pw * 0.1 - velocityPenalty;
+        const observedCompletionRate = Number.isFinite(overallCompletionRate)
+          ? Math.max(0, Math.min(100, overallCompletionRate as number))
+          : 50; // neutral baseline; there is no user outcome history to estimate from
+        const score = (observedCompletionRate / 100.0) * 0.4 + dw * 0.4 - pw * 0.1 - velocityPenalty;
         
         // Sigmoid activation mapping
         prob = 1.0 / (1.0 + Math.exp(-10 * (score - 0.45)));
@@ -78,7 +83,9 @@ export class PredictionEngine {
         completionProbability: Math.round(prob * 100),
         predictedCompletionDate: predictedDate,
         delayRisk: risk,
-        timeAllocationHours: Number((estimatedHours / Math.max(1, daysRem)).toFixed(1))
+        timeAllocationHours: Number((estimatedHours / Math.max(1, daysRem)).toFixed(1)),
+        predictionSource: 'deterministic_heuristic',
+        predictionDataStatus: 'insufficient'
       };
     });
   }
@@ -215,10 +222,6 @@ export class PredictionEngine {
 
   // Model 7: Goal Success Predictor
   public static calculateGoalSuccess(goals: Goal[], tasks: Task[]): Goal[] {
-    // Determine overall completion speed from tasks
-    const completedTasks = tasks.filter(t => t.status === 'completed');
-    const velocity = completedTasks.length > 0 ? (completedTasks.length / 7) : 0.4; // tasks per day
-
     return goals.map(goal => {
       const remainingProgress = 100 - goal.progress;
       if (remainingProgress <= 0) {
@@ -229,132 +232,33 @@ export class PredictionEngine {
           predictedMilestoneDelay: false,
           riskLevel: 'low',
           aiRecoveryPlan: ["Goal achieved. Complete post-mortem review."],
-          reasoning: "Goal is fully complete."
+          reasoning: "Goal progress is recorded as complete.",
+          predictionSource: 'deterministic_heuristic',
+          predictionDataStatus: 'sufficient'
         };
       }
-
-      // Base success estimate
-      let successProb = 75;
-      let delay = false;
-      let risk: 'low' | 'medium' | 'high' | 'critical' = 'low';
-      let recoveryPlan: string[] = [];
-
-      // Simulated days remaining based on target date
-      const daysRemaining = 22; // baseline mock
-      const requiredDailyRate = remainingProgress / daysRemaining;
-      const velocityRatio = velocity / Math.max(0.1, requiredDailyRate * 0.1); // relative task velocity ratio
-
-      // Sigmoid scale
-      const score = 1.0 / (1.0 + Math.exp(-2.0 * (velocityRatio - 1.0)));
-      successProb = Math.max(12, Math.min(97, Math.round(score * 100)));
-
-      if (successProb > 80) {
-        risk = 'low';
-        delay = false;
-        recoveryPlan = [
-          "Current schedule is highly stable.",
-          "Perform routine audit review in 5 days."
-        ];
-      } else if (successProb > 55) {
-        risk = 'medium';
-        delay = false;
-        recoveryPlan = [
-          "Consolidate active task queues to prevent micro-delays.",
-          "Block an extra 45 minutes of focus time daily."
-        ];
-      } else if (successProb > 35) {
-        risk = 'high';
-        delay = true;
-        recoveryPlan = [
-          "AI Intervention: High risk of milestone slippage.",
-          "Decompose large projects into simpler subtasks with 24-hour limits.",
-          "Halt non-essential auxiliary learning tracks."
-        ];
-      } else {
-        risk = 'critical';
-        delay = true;
-        recoveryPlan = [
-          "IMMEDIATE COGNITIVE OVERHAUL REQUIRED.",
-          "Prune remaining goal scope by 40% to secure core deliverables.",
-          "Establish synchronous pairing or mentor reviews to clear roadblocks."
-        ];
-      }
-
       return {
         ...goal,
-        successProbability: successProb,
-        failureProbability: 100 - successProb,
-        predictedMilestoneDelay: delay,
-        riskLevel: risk,
-        aiRecoveryPlan: recoveryPlan,
-        reasoning: `Goal has ${remainingProgress}% pending progress. Daily task completion velocity is ${velocity.toFixed(2)} tasks/day against a required rate of ${requiredDailyRate.toFixed(2)}.`
+        successProbability: null,
+        failureProbability: null,
+        predictedMilestoneDelay: null,
+        riskLevel: 'unknown',
+        aiRecoveryPlan: [],
+        reasoning: 'Goal success probability is unavailable: there is no validated model or historical goal-progress series.',
+        predictionSource: 'deterministic_heuristic',
+        predictionDataStatus: 'insufficient'
       };
     });
   }
 
   // Model 8 & 9: Productivity and Burnout Predictor
   public static calculateBurnoutAndProductivity(tasks: Task[]): BurnoutMetrics {
-    const highPriorityCount = tasks.filter(t => t.status !== 'completed' && (t.priority === 'high' || t.priority === 'urgent')).length;
-    const estWorkloadHours = tasks.filter(t => t.status !== 'completed').reduce((acc, t) => acc + (t.estimatedHours !== undefined ? t.estimatedHours : (t.estimatedMinutes || 30) / 60), 0);
-
-    // Compute burnout score
-    let burnoutScore = Math.max(15, Math.min(98, Math.round(25 + (highPriorityCount * 8) + (estWorkloadHours * 0.8))));
-    let risk: 'low' | 'medium' | 'high' | 'critical' = 'low';
-    let recoverySuggestions: string[] = [];
-
-    if (burnoutScore < 40) {
-      risk = 'low';
-      recoverySuggestions = [
-        "Productive state. Maintain current active task count.",
-        "Take a standard 5-minute breather between tasks."
-      ];
-    } else if (burnoutScore < 65) {
-      risk = 'medium';
-      recoverySuggestions = [
-        "Warning bounds. Ensure you schedule at least 1 rest day this week.",
-        "Establish a clear work-stop protocol at 19:00 daily."
-      ];
-    } else if (burnoutScore < 85) {
-      risk = 'high';
-      recoverySuggestions = [
-        "High burnout risk detected. Postpone non-critical dependencies.",
-        "Implement Pomodoro intervals (25 mins on, 5 mins off) with physical movement.",
-        "Disable digital communications after hours."
-      ];
-    } else {
-      risk = 'critical';
-      recoverySuggestions = [
-        "CRITICAL OVERLOAD: Rest immediately.",
-        "Halt all development tasks for 24 hours.",
-        "Request timeline extensions for critical path milestones."
-      ];
-    }
-
-    // Model 8: Expected productivity curve forecast (next 7 days)
-    const baseDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    const productivityTrend = baseDays.map((day, idx) => {
-      // Simulate productivity variance
-      const isWeekend = day === 'Sat' || day === 'Sun';
-      let value = 75 + Math.sin(idx * 0.9) * 10 - (burnoutScore * 0.15);
-      if (isWeekend) value = Math.max(20, value - 30);
-      value = Math.max(10, Math.min(100, value));
-
-      // Predicted value if AI advice followed (rebound curve)
-      let predictedValue = value + (burnoutScore * 0.22);
-      predictedValue = Math.max(10, Math.min(100, predictedValue));
-
-      return {
-        date: day,
-        value: Math.round(value),
-        predictedValue: Math.round(predictedValue)
-      };
-    });
-
     return {
-      burnoutRisk: risk,
-      burnoutScore,
-      recoverySuggestions,
-      productivityTrend
+      burnoutRisk: 'unknown',
+      recoverySuggestions: [],
+      productivityTrend: [],
+      predictionSource: 'deterministic_heuristic',
+      predictionDataStatus: 'insufficient'
     };
   }
 
@@ -405,11 +309,8 @@ export class PredictionEngine {
   // Model Monitoring Metrics
   public static getEngineMetrics(): PredictionEngineMetrics {
     return {
-      historicalAccuracy: 94.2,
-      precision: 93.5,
-      recall: 91.2,
-      f1Score: 92.3,
-      predictionDrift: 0.041
+      source: 'deterministic_heuristic',
+      validationStatus: 'not_evaluated'
     };
   }
 }

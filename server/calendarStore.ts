@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { DATA_DIR } from './dataDirectory';
 
 export interface GoogleCalendar {
   id: string;
@@ -59,7 +60,6 @@ export interface UserCalendarState {
   updatedAt: string;
 }
 
-const DATA_DIR = path.join(process.cwd(), "data");
 const CALENDAR_FILE = path.join(DATA_DIR, "calendar.json");
 
 // In-memory token cache: sensitive OAuth tokens are NEVER saved to disk or JSON

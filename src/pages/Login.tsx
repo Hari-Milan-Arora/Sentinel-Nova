@@ -12,6 +12,7 @@ export default function Login() {
   const [error, setError] = React.useState('');
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [ready, setReady] = React.useState(false);
+  const [scriptAttempt, setScriptAttempt] = React.useState(0);
   const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
 
   React.useEffect(() => {
@@ -24,27 +25,61 @@ export default function Login() {
       return;
     }
 
-    const scriptSrc = 'https://accounts.google.com/gsi/client';
-    const existingScript = document.querySelector<HTMLScriptElement>(`script[src="${scriptSrc}"]`);
-    if (existingScript) {
-      existingScript.addEventListener('load', () => setReady(true));
+    let script = document.querySelector<HTMLScriptElement>('script[src="https://accounts.google.com/gsi/client"]');
+    let timeoutId: number | undefined;
+    let disposed = false;
+    const fail = () => {
+      if (!disposed) {
+        setReady(false);
+        setError('Google Sign-In could not initialize. Check the network and confirm http://localhost:3000 is an authorized JavaScript origin for this OAuth client.');
+      }
+    };
+    const onLoad = () => {
+      if (disposed) return;
+      if (script) script.dataset.sentinelNovaLoaded = 'true';
+      if (window.google?.accounts?.id) {
+        setError('');
+        setReady(true);
+      } else {
+        fail();
+      }
+    };
+    const onError = () => fail();
+
+    if (window.google?.accounts?.id) {
+      setReady(true);
       return;
     }
 
-    const script = document.createElement('script');
-    script.src = scriptSrc;
-    script.async = true;
-    script.defer = true;
-    script.onload = () => setReady(true);
-    script.onerror = () => setError('Google Sign-In could not be loaded. Check your network connection.');
-    document.head.appendChild(script);
-  }, [clientId]);
+    if (!script) {
+      script = document.createElement('script');
+      script.src = 'https://accounts.google.com/gsi/client';
+      script.async = true;
+      script.defer = true;
+    } else if (script.dataset.sentinelNovaLoaded === 'true') {
+      fail();
+      return;
+    }
+
+    script.addEventListener('load', onLoad, { once: true });
+    script.addEventListener('error', onError, { once: true });
+    timeoutId = window.setTimeout(fail, 12_000);
+    if (!script.isConnected) document.head.appendChild(script);
+
+    return () => {
+      disposed = true;
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+      script?.removeEventListener('load', onLoad);
+      script?.removeEventListener('error', onError);
+    };
+  }, [clientId, scriptAttempt]);
 
   React.useEffect(() => {
     if (!ready || !clientId || !window.google?.accounts?.id) return;
-    window.google.accounts.id.initialize({
-      client_id: clientId,
-      callback: async (response: { credential: string }) => {
+    try {
+      window.google.accounts.id.initialize({
+        client_id: clientId,
+        callback: async (response: { credential: string }) => {
         setError('');
         setIsSubmitting(true);
         try {
@@ -70,12 +105,12 @@ export default function Login() {
         } finally {
           setIsSubmitting(false);
         }
-      },
-      auto_select: false,
-    });
+        },
+        auto_select: false,
+      });
 
-    const target = document.getElementById('google-button');
-    if (target) {
+      const target = document.getElementById('google-button');
+      if (!target) throw new Error('Google Sign-In button could not be mounted.');
       target.innerHTML = '';
       window.google.accounts.id.renderButton(target, {
         theme: 'filled_black',
@@ -84,6 +119,9 @@ export default function Login() {
         text: 'continue_with',
         width: 360,
       });
+    } catch {
+      setReady(false);
+      setError('Google Sign-In could not initialize. Confirm this site origin is authorized for the configured Google OAuth Web client.');
     }
   }, [ready, clientId, refresh, navigate, location.state]);
 
@@ -143,6 +181,9 @@ export default function Login() {
               </p>
               <div className="mt-9">
                 <div id="google-button" className="min-h-11 flex justify-center" />
+                {!ready && clientId && !error && (
+                  <p className="text-center text-xs text-slate-500">Loading Google Sign-In…</p>
+                )}
                 {isSubmitting && (
                   <div className="mt-4 flex items-center justify-center gap-2 text-xs text-violet-400">
                     <div className="h-4 w-4 animate-spin rounded-full border-2 border-violet-500 border-t-transparent" />
@@ -155,9 +196,23 @@ export default function Login() {
                   </div>
                 )}
                 {error && (
-                  <p className="mt-4 rounded-xl border border-red-500/20 bg-red-500/[0.06] p-3 text-xs leading-5 text-red-300">
-                    {error}
-                  </p>
+                  <div className="mt-4 rounded-xl border border-red-500/20 bg-red-500/[0.06] p-3 text-xs leading-5 text-red-300">
+                    <p>{error}</p>
+                    {!isSubmitting && (
+                      <button
+                        type="button"
+                        className="mt-2 font-medium underline underline-offset-2"
+                        onClick={() => {
+                          document.querySelector('script[src="https://accounts.google.com/gsi/client"]')?.remove();
+                          setError('');
+                          setReady(false);
+                          setScriptAttempt((attempt) => attempt + 1);
+                        }}
+                      >
+                        Retry Google Sign-In
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
               <p className="mt-8 text-center text-[11px] leading-5 text-slate-600">

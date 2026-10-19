@@ -1,0 +1,171 @@
+{
+  "artifact": {
+    "filename": "task-lead-time-v1.joblib",
+    "format": "joblib scikit-learn TransformedTargetRegressor pipeline",
+    "sha256": "07f40a75f553aa76f4907a546e92674811c0ff691f9a5ab9d45e59ecc21f401c"
+  },
+  "dataset": {
+    "exclusion_counts": {
+      "duplicate_full_rows_removed": 0,
+      "duplicate_title_rows_excluded": 6,
+      "eligible_completed_rows_before_duplicate_title_filter": 1193,
+      "rows_not_in_completed_status": 0,
+      "rows_with_cancelled_or_invalid_status": 0,
+      "rows_with_created_timestamp_parse_failure": 0,
+      "rows_with_missing_created_timestamp": 0,
+      "rows_with_missing_or_blank_summary": 0,
+      "rows_with_missing_resolved_timestamp": 0,
+      "rows_with_nonpositive_lead_time": 0,
+      "rows_with_resolved_timestamp_parse_failure": 0,
+      "source_rows": 1193,
+      "target_summary_days": {
+        "max": 3367.934027777778,
+        "median": 472.2638888888889,
+        "min": 0.0006944444444444445,
+        "p90": 1089.7055555555557,
+        "p95": 1122.8199305555556,
+        "p99": 1148.0547222222222
+      },
+      "unresolved_or_not_completed_rows": 0,
+      "usable_rows": 1187
+    },
+    "filename": "Jira task dataset.xlsx",
+    "license": "CC BY 4.0 as stated on the versioned Mendeley Data record",
+    "observed_columns": [
+      "Summary",
+      "Status",
+      "Priority",
+      "Created",
+      "Resolved",
+      "Labels",
+      "Description"
+    ],
+    "sha256": "7dba698472a37055a25899613b3aad88c2906a987bf7a0fd82295140b20e0867",
+    "sheet_name": "100data",
+    "size_bytes": 278494,
+    "source_row_count": 1193,
+    "source_url": "https://data.mendeley.com/datasets/249h53865h/4",
+    "usable_row_count": 1187,
+    "version": "Mendeley Data v4; DOI 10.17632/249h53865h.4"
+  },
+  "features": {
+    "excluded": [
+      "Status",
+      "Priority",
+      "Created",
+      "Resolved",
+      "Labels",
+      "Description",
+      "Task identifiers (none present)"
+    ],
+    "feature_schema": [
+      "Summary"
+    ],
+    "included": [
+      "Summary (task title text)"
+    ],
+    "reason": "Post-outcome status/resolution are leakage; mutable fields lack point-in-time history; Created is used only for target and split."
+  },
+  "limitations": [
+    "The workbook contains only resolved rows with Status=Done; metrics are conditional on this selected completed-task sample.",
+    "The dataset is Jira software-task data; estimates may not generalize to personal or non-software tasks.",
+    "Summary is the only model feature. The workbook has no revision history, so title edits after creation cannot be ruled out.",
+    "Created and Resolved Excel timestamps are timezone-naive; lead time is computed as their naive timestamp difference.",
+    "Predicted lead time is elapsed calendar time, not active effort or focused work duration.",
+    "The dataset has no stable task identifier and one repeated Summary group; those rows are excluded to prevent title leakage.",
+    "The model is evaluated on one chronological held-out slice and is not calibrated or production-validated."
+  ],
+  "model_version": "task-lead-time-v1",
+  "report_version": 1,
+  "split": {
+    "created_ranges": {
+      "test": [
+        "2024-11-19T16:00:00",
+        "2025-02-21T15:24:00"
+      ],
+      "train": [
+        "2013-12-16T07:42:00",
+        "2022-03-14T14:08:00"
+      ],
+      "validation": [
+        "2022-03-15T16:37:00",
+        "2024-11-19T15:58:00"
+      ]
+    },
+    "method": "chronological_sorted_by_Created",
+    "ratios": {
+      "test": 0.15,
+      "train": 0.7,
+      "validation": 0.15
+    },
+    "sample_counts": {
+      "final_fit_train_plus_validation": 1008,
+      "test": 179,
+      "train": 830,
+      "validation": 178
+    }
+  },
+  "target": {
+    "definition": "(Resolved - Created).total_seconds() / 86400",
+    "distribution_days": {
+      "max": 3367.934027777778,
+      "median": 472.2638888888889,
+      "min": 0.0006944444444444445,
+      "p90": 1089.7055555555557,
+      "p95": 1122.8199305555556,
+      "p99": 1148.0547222222222
+    },
+    "name": "task_completion_lead_time",
+    "semantics": "Elapsed calendar days from task creation to resolution; not active work duration.",
+    "units": "elapsed_calendar_days"
+  },
+  "training": {
+    "beats_baseline_on_test_mae": true,
+    "candidate_model": "TF-IDF word unigram/bigram + Ridge regression on log1p(lead_time_days)",
+    "interpretation": "Point estimate only; no calibrated interval or completion-probability output.",
+    "library_versions": {
+      "joblib": "1.5.3",
+      "numpy": "2.2.6",
+      "pandas": "2.2.3",
+      "python": "3.10.11",
+      "scikit_learn": "1.5.2"
+    },
+    "random_seed": 20261019,
+    "selected_alpha": 100.0,
+    "test_metrics": {
+      "baseline_training_median": {
+        "mae_days": 620.9803072625699,
+        "median_absolute_error_days": 621.1680555555556,
+        "r2": -2413.1707921091293,
+        "rmse_days": 621.1089587426507,
+        "sample_count": 179
+      },
+      "trained_model": {
+        "mae_days": 281.7987267275159,
+        "median_absolute_error_days": 282.52269108285543,
+        "r2": -497.71192033741835,
+        "rmse_days": 282.29856615377247,
+        "sample_count": 179
+      }
+    },
+    "validation_alpha_results": [
+      {
+        "alpha": 0.1,
+        "mae_days": 689.2471023391529
+      },
+      {
+        "alpha": 1.0,
+        "mae_days": 469.3751538851185
+      },
+      {
+        "alpha": 10.0,
+        "mae_days": 410.5303950860998
+      },
+      {
+        "alpha": 100.0,
+        "mae_days": 402.477161586543
+      }
+    ]
+  },
+  "training_timestamp_utc": "2026-10-19T05:03:10.373644+00:00"
+}

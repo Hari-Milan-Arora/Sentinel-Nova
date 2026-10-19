@@ -443,7 +443,6 @@ export class MemoryAgent extends BaseAgent {
       proposals,
       summary: reasoning.summary,
       decisionExplanation: reasoning.decisionExplanation,
-      confidence: reasoning.confidence,
       warnings,
       reasoningSource: reasoning.reasoningSource,
       metadata: {
@@ -459,7 +458,6 @@ export class MemoryAgent extends BaseAgent {
       agentId: this.id,
       executionId: context.executionId,
       output,
-      confidence: reasoning.confidence,
       actions,
       warnings,
       errors: [],

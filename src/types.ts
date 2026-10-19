@@ -150,6 +150,8 @@ export interface Task {
   suggestedReorderIdx?: number;
   timeAllocationHours?: number;
   pastCompletionRate?: number;
+  predictionSource?: 'deterministic_heuristic' | 'real_trained_model' | 'validated_external_model';
+  predictionDataStatus?: 'sufficient' | 'insufficient';
 }
 
 export type GoalStatus = 'active' | 'completed' | 'archived';
@@ -170,12 +172,14 @@ export interface Goal {
 
   // Compatibility and predictive fields for existing engine & analytics
   category?: 'career' | 'technical' | 'project' | 'education';
-  successProbability?: number; // calculated %
-  failureProbability?: number; // calculated %
-  predictedMilestoneDelay?: boolean;
+  successProbability?: number | null;
+  failureProbability?: number | null;
+  predictedMilestoneDelay?: boolean | null;
   aiRecoveryPlan?: string[];
-  riskLevel?: 'low' | 'medium' | 'high' | 'critical';
+  riskLevel?: 'low' | 'medium' | 'high' | 'critical' | 'unknown';
   reasoning?: string;
+  predictionSource?: 'deterministic_heuristic' | 'real_trained_model' | 'validated_external_model';
+  predictionDataStatus?: 'sufficient' | 'insufficient';
 }
 
 export type ProjectStatus = 'active' | 'completed' | 'archived' | 'on_hold';
@@ -237,18 +241,22 @@ export interface ResumeMetrics {
 }
 
 export interface BurnoutMetrics {
-  burnoutRisk: 'low' | 'medium' | 'high' | 'critical';
-  burnoutScore: number; // 0-100
+  burnoutRisk: 'low' | 'medium' | 'high' | 'critical' | 'unknown';
+  burnoutScore?: number;
   recoverySuggestions: string[];
   productivityTrend: { date: string; value: number; predictedValue: number }[];
+  predictionSource: 'deterministic_heuristic';
+  predictionDataStatus: 'insufficient' | 'heuristic_only';
 }
 
 export interface PredictionEngineMetrics {
-  historicalAccuracy: number; // percentage
-  precision: number;
-  recall: number;
-  f1Score: number;
-  predictionDrift: number; // indicator of shifts
+  source: 'deterministic_heuristic';
+  validationStatus: 'not_evaluated';
+  historicalAccuracy?: number;
+  precision?: number;
+  recall?: number;
+  f1Score?: number;
+  predictionDrift?: number;
 }
 
 export type DayOfWeek = 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday' | 'Sunday';
@@ -567,7 +575,7 @@ export interface MemoryItem {
   type: MemoryType;
   content: string;
   importance: MemoryImportance;
-  confidence: number;
+  confidence?: number;
   status: MemoryStatus;
   source: MemorySource;
   sourceReference: string;
@@ -639,7 +647,7 @@ export interface MemoryAgentOutput {
   proposals: MemoryProposal[];
   summary: string;
   decisionExplanation: string;
-  confidence: number;
+  confidence?: number;
   warnings?: string[];
   reasoningSource: 'deterministic' | 'gemini_enhanced' | 'deterministic_fallback';
   metadata?: Record<string, unknown>;

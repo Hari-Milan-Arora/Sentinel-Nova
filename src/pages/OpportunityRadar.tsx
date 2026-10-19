@@ -26,7 +26,6 @@ interface OpportunityRadarProps {
   opportunities: Opportunity[];
   onAddOpportunity: (opp: Omit<Opportunity, 'id' | 'fitScore' | 'expectedSuccess' | 'applicationConfidence' | 'careerImpactScore' | 'deadlineUrgency'>) => void;
   onDeleteOpportunity: (id: string) => void;
-  onRecalibrate: () => void;
   isDark: boolean;
 }
 
@@ -34,7 +33,6 @@ export default function OpportunityRadar({
   opportunities,
   onAddOpportunity,
   onDeleteOpportunity,
-  onRecalibrate,
   isDark
 }: OpportunityRadarProps) {
   const [showAddForm, setShowAddForm] = React.useState(false);
@@ -45,7 +43,6 @@ export default function OpportunityRadar({
   const [url, setUrl] = React.useState('');
 
   const [activeOppId, setActiveOppId] = React.useState<string | null>(null);
-  const [isCalibrating, setIsCalibrating] = React.useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -65,12 +62,6 @@ export default function OpportunityRadar({
     setShowAddForm(false);
   };
 
-  const triggerCalibrate = async () => {
-    setIsCalibrating(true);
-    await new Promise(resolve => setTimeout(resolve, 800));
-    onRecalibrate();
-    setIsCalibrating(false);
-  };
 
   React.useEffect(() => {
     if (opportunities.length > 0 && !activeOppId) {
@@ -91,20 +82,18 @@ export default function OpportunityRadar({
             <span className="px-2 py-0.5 bg-violet-600/10 text-violet-400 border border-violet-500/20 font-mono text-[8px] font-bold rounded">PHASE 3 ACTIVE</span>
           </div>
           <p className="text-xs text-gray-400">
-            Scanning career listings and calculating candidate-opportunity fit scoring, expected success, and alignment metrics.
+            Track postings you add manually. External listing search is not connected; match scores are heuristic previews and entries are kept only in this browser session.
           </p>
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
           <button
-            onClick={triggerCalibrate}
-            disabled={isCalibrating}
-            className={`px-3.5 py-1.5 rounded-xl border border-gray-800 text-[10px] font-mono font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer hover:bg-gray-800/10 ${
-              isCalibrating ? 'opacity-50' : ''
-            }`}
+            disabled
+            title="External posting search is not configured"
+            className="px-3.5 py-1.5 rounded-xl border border-gray-800 text-[10px] font-mono font-bold uppercase tracking-wider flex items-center gap-1.5 opacity-50 cursor-not-allowed"
           >
-            <RefreshCw size={12} className={isCalibrating ? 'animate-spin' : ''} />
-            {isCalibrating ? 'Scanning...' : 'Scan Postings'}
+            <RefreshCw size={12} />
+            Search unavailable
           </button>
           
           <button

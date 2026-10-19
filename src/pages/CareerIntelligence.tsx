@@ -45,13 +45,16 @@ export default function CareerIntelligence({
 
   return (
     <div className="space-y-6">
+      <div role="note" className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs leading-5 text-amber-200">
+        Prototype only: skill scores are temporary demo inputs. Readiness, hiring, salary, and growth numbers are heuristic illustrations, not trained or validated predictions.
+      </div>
       
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-gray-800/20 pb-4">
         <div className="space-y-1">
           <h2 className="text-lg font-bold font-space tracking-tight">Career Trajectory Forecaster</h2>
           <p className="text-xs text-gray-400">
-            Simulating skill growth momentum and career target compliance matrices to project future positions and earning potential.
+            Compare a temporary skill profile with example role requirements. No employer data, salary evidence, or hiring outcomes are connected.
           </p>
         </div>
 

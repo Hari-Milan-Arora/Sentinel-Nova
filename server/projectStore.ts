@@ -1,12 +1,12 @@
 import fs from 'fs/promises';
 import path from 'path';
+import { DATA_DIR } from './dataDirectory';
 import { Project, ProjectPriority, ProjectStatus } from '../src/types';
 import { unassignProjectFromTasks } from './taskStore';
 import { getGoalById, linkProjectToGoal, unlinkProjectFromGoal } from './goalStore';
 
 export interface ServerProject extends Project {}
 
-const DATA_DIR = path.join(process.cwd(), 'data');
 const PROJECTS_FILE = path.join(DATA_DIR, 'projects.json');
 
 let projectsCache: Record<string, ServerProject[]> | null = null;

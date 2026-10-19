@@ -10,6 +10,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import { DATA_DIR } from '../../dataDirectory';
 import {
   DecisionRecord,
   DecisionType,
@@ -27,7 +28,6 @@ export interface DecisionFilters {
   offset?: number;
 }
 
-const DATA_DIR = path.resolve(process.cwd(), 'data');
 const DECISION_FILE = path.join(DATA_DIR, 'decision_records.json');
 const MAX_RECORDS_PER_USER = 1000;
 

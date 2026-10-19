@@ -1,0 +1,484 @@
+{
+  "artifact_sha256": "07f40a75f553aa76f4907a546e92674811c0ff691f9a5ab9d45e59ecc21f401c",
+  "baseline_definition": {
+    "test": "train-plus-validation median/mean, matching final model fit set",
+    "train": "training-partition median/mean; in-sample diagnostic",
+    "validation": "training-partition median/mean"
+  },
+  "created_ranges": {
+    "test": [
+      "2024-11-19T16:00:00",
+      "2025-02-21T15:24:00"
+    ],
+    "train": [
+      "2013-12-16T07:42:00",
+      "2022-03-14T14:08:00"
+    ],
+    "validation": [
+      "2022-03-15T16:37:00",
+      "2024-11-19T15:58:00"
+    ]
+  },
+  "dataset_sha256": "7dba698472a37055a25899613b3aad88c2906a987bf7a0fd82295140b20e0867",
+  "diagnostic_version": 1,
+  "feature_schema": [
+    "Summary"
+  ],
+  "limitations": [
+    "The workbook contains only resolved rows with Status=Done; metrics are conditional on this selected completed-task sample.",
+    "The dataset is Jira software-task data; estimates may not generalize to personal or non-software tasks.",
+    "Summary is the only model feature. The workbook has no revision history, so title edits after creation cannot be ruled out.",
+    "Created and Resolved Excel timestamps are timezone-naive; lead time is computed as their naive timestamp difference.",
+    "Predicted lead time is elapsed calendar time, not active effort or focused work duration.",
+    "The dataset has no stable task identifier and one repeated Summary group; those rows are excluded to prevent title leakage.",
+    "The model is evaluated on one chronological held-out slice and is not calibrated or production-validated."
+  ],
+  "metric_interpretation": {
+    "test": "single final chronological held-out evaluation; no test-based tuning was performed",
+    "train": "in-sample metrics from a model fitted on train; optimistic and not a generalization estimate",
+    "validation": "alpha was selected on this validation partition; descriptive/model-selection metric, not unbiased"
+  },
+  "metrics_by_split": {
+    "test": {
+      "actual_above_train_p99_count": 0,
+      "mean_baseline": {
+        "actual_mean_days": 15.144692737430168,
+        "actual_std_days": 12.641068881389817,
+        "mae_days": 591.5533148683899,
+        "median_absolute_error_days": 591.7410631613757,
+        "n": 179,
+        "prediction_mean_days": 606.6980076058198,
+        "prediction_std_days": 2.2737367544323206e-13,
+        "r2": -2189.8793537424367,
+        "residual_mean_days": 591.5533148683899,
+        "residual_median_days": 591.7410631613757,
+        "rmse_days": 591.6883647277884
+      },
+      "median_baseline": {
+        "actual_mean_days": 15.144692737430168,
+        "actual_std_days": 12.641068881389817,
+        "mae_days": 620.9803072625699,
+        "median_absolute_error_days": 621.1680555555556,
+        "n": 179,
+        "prediction_mean_days": 636.125,
+        "prediction_std_days": 0.0,
+        "r2": -2413.1707921091293,
+        "residual_mean_days": 620.9803072625699,
+        "residual_median_days": 621.1680555555556,
+        "rmse_days": 621.1089587426507
+      },
+      "prediction_distribution_days": {
+        "max": 326.9352891978778,
+        "mean": 296.9434194649461,
+        "median": 298.95128574332045,
+        "min": 256.9540913365994,
+        "n": 179,
+        "p10": 280.21809217233556,
+        "p25": 288.1605115945391,
+        "p75": 303.9778696500281,
+        "p90": 313.6856685013051,
+        "p95": 318.7029614737792,
+        "p99": 325.9462708719898,
+        "std": 13.160371174085023
+      },
+      "residual_distribution_days": {
+        "max": 318.2847176409071,
+        "mean": 281.7987267275159,
+        "median": 282.52269108285543,
+        "min": 223.52284230874966,
+        "n": 179,
+        "p10": 259.8733988592802,
+        "p25": 270.67361584364056,
+        "p75": 294.42074450154666,
+        "p90": 301.3533318854223,
+        "p95": 306.6013991152138,
+        "p99": 312.8078895426252,
+        "std": 16.791607047172377
+      },
+      "train_p99_threshold_days": 1151.484625,
+      "trained_model": {
+        "actual_mean_days": 15.144692737430168,
+        "actual_std_days": 12.641068881389817,
+        "mae_days": 281.7987267275159,
+        "median_absolute_error_days": 282.52269108285543,
+        "n": 179,
+        "prediction_mean_days": 296.9434194649461,
+        "prediction_std_days": 13.160371174085023,
+        "r2": -497.71192033741835,
+        "residual_mean_days": 281.7987267275159,
+        "residual_median_days": 282.52269108285543,
+        "rmse_days": 282.29856615377247
+      }
+    },
+    "train": {
+      "actual_above_train_p99_count": 9,
+      "mean_baseline": {
+        "actual_mean_days": 711.8713579317268,
+        "actual_std_days": 352.80970299985734,
+        "mae_days": 293.6262897433106,
+        "median_absolute_error_days": 305.6244829317268,
+        "n": 830,
+        "prediction_mean_days": 711.8713579317266,
+        "prediction_std_days": 2.2737367544323206e-13,
+        "r2": 0.0,
+        "residual_mean_days": -6.136349795094456e-14,
+        "residual_median_days": -49.820655957162046,
+        "rmse_days": 352.80970299985734
+      },
+      "median_baseline": {
+        "actual_mean_days": 711.8713579317268,
+        "actual_std_days": 352.80970299985734,
+        "mae_days": 290.7890135542169,
+        "median_absolute_error_days": 300.2711805555556,
+        "n": 830,
+        "prediction_mean_days": 761.6920138888888,
+        "prediction_std_days": 0.0,
+        "r2": -0.01994058253271258,
+        "residual_mean_days": 49.82065595716192,
+        "residual_median_days": -5.684341886080802e-14,
+        "rmse_days": 356.3099553630932
+      },
+      "prediction_distribution_days": {
+        "max": 542.3983545285965,
+        "mean": 518.064206421079,
+        "median": 519.5823154157322,
+        "min": 484.7321554701205,
+        "n": 830,
+        "p10": 504.5445616761452,
+        "p25": 512.687296675506,
+        "p75": 524.7353218645299,
+        "p90": 529.3494458227907,
+        "p95": 531.6603484964357,
+        "p99": 536.0691076001094,
+        "std": 9.913108806956185
+      },
+      "residual_distribution_days": {
+        "max": 513.8493434204421,
+        "mean": -193.80715151064786,
+        "median": -241.12974761040786,
+        "min": -2834.4490845807063,
+        "n": 830,
+        "p10": -581.8325229159003,
+        "p25": -519.0158424976248,
+        "p75": 86.4098120396921,
+        "p90": 289.0527705277919,
+        "p95": 460.13336056577845,
+        "p99": 490.61732241750866,
+        "std": 348.09626640962955
+      },
+      "train_p99_threshold_days": 1151.484625,
+      "trained_model": {
+        "actual_mean_days": 711.8713579317268,
+        "actual_std_days": 352.80970299985734,
+        "mae_days": 339.73249844489993,
+        "median_absolute_error_days": 345.63355817295155,
+        "n": 830,
+        "prediction_mean_days": 518.064206421079,
+        "prediction_std_days": 9.913108806956185,
+        "r2": -0.2752168901880119,
+        "residual_mean_days": -193.80715151064786,
+        "residual_median_days": -241.12974761040786,
+        "rmse_days": 398.41212665404026
+      }
+    },
+    "validation": {
+      "actual_above_train_p99_count": 0,
+      "mean_baseline": {
+        "actual_mean_days": 116.28294709737827,
+        "actual_std_days": 142.7041616807742,
+        "mae_days": 595.5884108343486,
+        "median_absolute_error_days": 685.1241357095046,
+        "n": 178,
+        "prediction_mean_days": 711.8713579317267,
+        "prediction_std_days": 1.1368683772161603e-13,
+        "r2": -17.418838787965434,
+        "residual_mean_days": 595.5884108343486,
+        "residual_median_days": 685.1241357095046,
+        "rmse_days": 612.4459428236889
+      },
+      "median_baseline": {
+        "actual_mean_days": 116.28294709737827,
+        "actual_std_days": 142.7041616807742,
+        "mae_days": 645.4090667915104,
+        "median_absolute_error_days": 734.9447916666666,
+        "n": 178,
+        "prediction_mean_days": 761.6920138888888,
+        "prediction_std_days": 0.0,
+        "r2": -20.454875808019594,
+        "residual_mean_days": 645.4090667915104,
+        "residual_median_days": 734.9447916666666,
+        "rmse_days": 660.997232413042
+      },
+      "prediction_distribution_days": {
+        "max": 541.2978917713431,
+        "mean": 518.7601086839214,
+        "median": 518.7614189445706,
+        "min": 497.0149950491594,
+        "n": 178,
+        "p10": 506.9715641147174,
+        "p25": 513.6966696934614,
+        "p75": 524.1610067983513,
+        "p90": 529.5024793775266,
+        "p95": 531.5866024099117,
+        "p99": 537.5563005358684,
+        "std": 8.438792952547269
+      },
+      "residual_distribution_days": {
+        "max": 531.7458412725003,
+        "mean": 402.477161586543,
+        "median": 491.96635847913376,
+        "min": 146.79355755788754,
+        "n": 178,
+        "p10": 176.1354090051466,
+        "p25": 211.07089163462692,
+        "p75": 514.5552686820063,
+        "p90": 522.1799168251156,
+        "p95": 525.944363726987,
+        "p99": 530.0555018186002,
+        "std": 144.37690565521302
+      },
+      "train_p99_threshold_days": 1151.484625,
+      "trained_model": {
+        "actual_mean_days": 116.28294709737827,
+        "actual_std_days": 142.7041616807742,
+        "mae_days": 402.477161586543,
+        "median_absolute_error_days": 491.96635847913376,
+        "n": 178,
+        "prediction_mean_days": 518.7601086839214,
+        "prediction_std_days": 8.438792952547269,
+        "r2": -7.978013511123004,
+        "residual_mean_days": 402.477161586543,
+        "residual_median_days": 491.96635847913376,
+        "rmse_days": 427.5892380373184
+      }
+    }
+  },
+  "model_version": "task-lead-time-v1",
+  "no_test_tuning": true,
+  "split_counts": {
+    "test": 179,
+    "train": 830,
+    "validation": 178
+  },
+  "target": {
+    "definition": "(Resolved - Created).total_seconds() / 86400",
+    "distribution_days": {
+      "max": 3367.934027777778,
+      "median": 472.2638888888889,
+      "min": 0.0006944444444444445,
+      "p90": 1089.7055555555557,
+      "p95": 1122.8199305555556,
+      "p99": 1148.0547222222222
+    },
+    "name": "task_completion_lead_time",
+    "semantics": "Elapsed calendar days from task creation to resolution; not active work duration.",
+    "units": "elapsed_calendar_days"
+  },
+  "target_distribution_by_split": {
+    "test": {
+      "max": 58.96458333333333,
+      "mean": 15.144692737430168,
+      "median": 14.956944444444444,
+      "min": 0.0020833333333333333,
+      "n": 179,
+      "p10": 0.06333333333333334,
+      "p25": 3.8506944444444446,
+      "p75": 23.160416666666666,
+      "p90": 28.834027777777788,
+      "p95": 41.46611111111111,
+      "p99": 48.02730555555554,
+      "std": 12.641068881389817
+    },
+    "train": {
+      "max": 3367.934027777778,
+      "mean": 711.8713579317268,
+      "median": 761.6920138888888,
+      "min": 0.0006944444444444445,
+      "n": 830,
+      "p10": 221.11097222222233,
+      "p25": 428.85659722222226,
+      "p75": 1041.5008680555557,
+      "p90": 1098.836875,
+      "p95": 1133.6757291666665,
+      "p99": 1151.484625,
+      "std": 352.80970299985734
+    },
+    "validation": {
+      "max": 359.50416666666666,
+      "mean": 116.28294709737827,
+      "median": 26.747222222222224,
+      "min": 0.0006944444444444445,
+      "n": 178,
+      "p10": 0.16368055555555555,
+      "p25": 1.8194444444444444,
+      "p75": 303.15399305555553,
+      "p90": 343.3526388888889,
+      "p95": 352.78572916666667,
+      "p99": 357.92629861111106,
+      "std": 142.7041616807742
+    }
+  },
+  "test_r2_decomposition": {
+    "formula": "1 - SSE/SST",
+    "interpretation": "Large errors relative to the held-out test target's own variance can yield strongly negative R2 even when MAE beats a badly shifted median baseline.",
+    "sse": 14264954.000993174,
+    "sst_about_test_mean": 28603.595421063517,
+    "test_target_mean_days": 15.144692737430168,
+    "test_target_std_days": 12.641068881389817
+  },
+  "test_subgroups": {
+    "created_year": [
+      {
+        "actual_mean_days": 15.671543209876543,
+        "actual_std_days": 12.343504074132378,
+        "group": "2024",
+        "mae_days": 279.7815229725451,
+        "median_absolute_error_days": 279.39513974715203,
+        "n": 90,
+        "prediction_mean_days": 295.45306618242165,
+        "prediction_std_days": 13.058390888644297,
+        "r2": -514.5806361197842,
+        "residual_mean_days": 279.7815229725451,
+        "residual_median_days": 279.39513974715203,
+        "rmse_days": 280.2765504655448
+      },
+      {
+        "actual_mean_days": 14.611922596754056,
+        "actual_std_days": 12.91317745242037,
+        "group": "2025",
+        "mae_days": 283.8385956932167,
+        "median_absolute_error_days": 286.02100624035324,
+        "n": 89,
+        "prediction_mean_days": 298.4505182899708,
+        "prediction_std_days": 13.091285360517729,
+        "r2": -483.8139359064469,
+        "residual_mean_days": 283.8385956932167,
+        "residual_median_days": 286.02100624035324,
+        "rmse_days": 284.3286785820541
+      }
+    ],
+    "fixed_target_ranges_days": [
+      {
+        "actual_mean_days": 12.27100051440329,
+        "actual_std_days": 9.22155303557031,
+        "group": "0-30",
+        "mae_days": 284.3678641407439,
+        "median_absolute_error_days": 285.4467357334013,
+        "n": 162,
+        "prediction_mean_days": 296.63886465514724,
+        "prediction_std_days": 13.06306266348505,
+        "r2": -952.5315338248943,
+        "residual_mean_days": 284.3678641407439,
+        "residual_median_days": 285.4467357334013,
+        "rmse_days": 284.7551572016611
+      },
+      {
+        "group": "30-365",
+        "metrics_suppressed": "requires_n_at_least_20",
+        "n": 17
+      },
+      {
+        "group": "365-730",
+        "metrics_suppressed": "requires_n_at_least_20",
+        "n": 0
+      },
+      {
+        "group": "730+",
+        "metrics_suppressed": "requires_n_at_least_20",
+        "n": 0
+      }
+    ]
+  },
+  "text_feature_drift": {
+    "test": {
+      "characters": {
+        "max": 163.0,
+        "mean": 41.43016759776536,
+        "median": 39.0,
+        "min": 8.0,
+        "n": 179,
+        "p10": 16.8,
+        "p25": 24.0,
+        "p75": 53.0,
+        "p90": 72.40000000000003,
+        "p95": 83.19999999999999,
+        "p99": 122.66,
+        "std": 23.910900379432622
+      },
+      "whitespace_tokens": {
+        "max": 26.0,
+        "mean": 6.5027932960893855,
+        "median": 6.0,
+        "min": 1.0,
+        "n": 179,
+        "p10": 3.0,
+        "p25": 3.0,
+        "p75": 8.0,
+        "p90": 11.200000000000017,
+        "p95": 13.0,
+        "p99": 17.879999999999995,
+        "std": 3.8132000984465853
+      }
+    },
+    "train": {
+      "characters": {
+        "max": 240.0,
+        "mean": 50.43855421686747,
+        "median": 48.0,
+        "min": 9.0,
+        "n": 830,
+        "p10": 25.0,
+        "p25": 33.0,
+        "p75": 64.75,
+        "p90": 78.0,
+        "p95": 89.0,
+        "p99": 113.42000000000007,
+        "std": 22.625616313646834
+      },
+      "whitespace_tokens": {
+        "max": 43.0,
+        "mean": 7.966265060240964,
+        "median": 7.5,
+        "min": 1.0,
+        "n": 830,
+        "p10": 4.0,
+        "p25": 5.0,
+        "p75": 10.0,
+        "p90": 13.0,
+        "p95": 14.0,
+        "p99": 18.710000000000036,
+        "std": 3.802512711049744
+      }
+    },
+    "validation": {
+      "characters": {
+        "max": 120.0,
+        "mean": 50.657303370786515,
+        "median": 48.0,
+        "min": 8.0,
+        "n": 178,
+        "p10": 24.7,
+        "p25": 36.0,
+        "p75": 62.75,
+        "p90": 79.30000000000001,
+        "p95": 89.0,
+        "p99": 114.60999999999993,
+        "std": 21.015256029528118
+      },
+      "whitespace_tokens": {
+        "max": 19.0,
+        "mean": 8.44943820224719,
+        "median": 8.0,
+        "min": 2.0,
+        "n": 178,
+        "p10": 4.0,
+        "p25": 6.0,
+        "p75": 10.0,
+        "p90": 13.300000000000011,
+        "p95": 15.150000000000006,
+        "p99": 18.0,
+        "std": 3.638159912586557
+      }
+    }
+  }
+}

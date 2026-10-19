@@ -1,5 +1,7 @@
 # Sentinel Nova: Empirical Research Dataset & Experimental Analysis
 
+> **Status: withdrawn / unverified draft.** The scenario totals, comparative percentages, p-values, ablation metrics, and claims of empirical testing below have not been verified against a reproducible data-generation and analysis run in this repository. Treat them as unsupported draft content, not product evidence or publishable research. Current executable regression tests are synthetic fixtures for software invariants; they are not a 1,000-user study or a benchmark against external agents. Do not use the figures below to describe product performance.
+
 ## Working Title
 **Sentinel Nova: A Deliberative Multi-Agent Architecture for High-Reliability Autonomous Productivity with Cryptographic Parameter Binding and Bounded Recovery**
 

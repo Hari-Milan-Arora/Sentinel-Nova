@@ -1,10 +1,10 @@
 import fs from 'fs/promises';
 import path from 'path';
+import { DATA_DIR } from './dataDirectory';
 import { Goal, GoalPriority, GoalStatus } from '../src/types';
 
 export interface ServerGoal extends Goal {}
 
-const DATA_DIR = path.join(process.cwd(), 'data');
 const GOALS_FILE = path.join(DATA_DIR, 'goals.json');
 
 let goalsCache: Record<string, ServerGoal[]> | null = null;

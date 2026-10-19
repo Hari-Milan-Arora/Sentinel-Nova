@@ -721,9 +721,9 @@ async function runDay5C4SchedulerAgentTestSuite() {
     assert(snapshot.candidates.length <= 5);
   });
 
-  await test('AS', 'Gemini timeout safety: bounded with Promise.race and timer cleanup (<= 3000ms)', () => {
+  await test('AS', 'Gemini timeout safety: bounded with Promise.race and timer cleanup (<= 6500ms)', () => {
     // Verified in SchedulingReasoningService timeoutMs property
-    assert((reasoningService as any).timeoutMs <= 3000);
+    assert((reasoningService as any).timeoutMs <= 6500);
   });
 
   await test('AT', 'Gemini fallback: returns deterministic best candidate if Gemini API key missing', async () => {

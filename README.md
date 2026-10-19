@@ -1,18 +1,16 @@
 <div align="center">
 
 # 🚀 Sentinel Nova
-### Autonomous AI Chief of Staff with Deliberative Reasoning & Cryptographic Safety
+### Deliberative AI Chief of Staff with Human-Confirmed Actions
 
 *The AI that thinks, verifies, and binds before it acts.*
 
-[![Build Status](https://img.shields.io/badge/Build-Passing-brightgreen?style=flat-square)](https://github.com/Hari-Milan-Arora/Sentinel-Nova)
-[![Tests](https://img.shields.io/badge/Tests-308%20Passed%20%7C%200%20Failed-success?style=flat-square)](./docs/TEST_RESULTS.md)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.8-blue?style=flat-square&logo=typescript)](https://www.typescriptlang.org/)
-[![React](https://img.shields.io/badge/React-19-61dafb?style=flat-square&logo=react)](https://react.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue?style=flat-square&logo=typescript)](https://www.typescriptlang.org/)
+[![React](https://img.shields.io/badge/React-18-61dafb?style=flat-square&logo=react)](https://react.dev/)
 [![Node](https://img.shields.io/badge/Node.js-22.x-green?style=flat-square&logo=node.js)](https://nodejs.org/)
 [![License](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](LICENSE)
 
-[Live Demo](https://aeaas-sentinel-nova-573426129510.asia-southeast1.run.app) • [Research Paper Dataset](./docs/RESEARCH_PAPER_DATA.md) • [Test Suite Report](./docs/TEST_RESULTS.md)
+[Live Demo](https://aeaas-sentinel-nova-573426129510.asia-southeast1.run.app) • [ML methodology](./docs/ML_DATASET_METHOD.md) • [AI/ML/LLM status](./docs/AI_ML_LLM_ROOT_CAUSE.md)
 
 </div>
 
@@ -20,7 +18,7 @@
 
 ## 📌 Overview
 
-**Sentinel Nova** is a production-grade **AI Chief of Staff** designed to bridge the alignment, safety, and reliability gap in autonomous personal productivity systems. 
+**Sentinel Nova** is an actively developed **AI Chief of Staff** for task planning, prioritization, and human-confirmed actions. Its deterministic planning and scheduling layers remain authoritative; Gemini provides optional language interpretation and explanation when configured.
 
 Unlike traditional chatbot assistants that hallucinate deadlines or unconstrained ReAct agents that blindly mutate external calendars, Sentinel Nova introduces a **deliberative multi-agent architecture** where:
 1. **Mathematical Determinism Anchors AI Reasoning**: Prioritization and scheduling combine multi-factor objective scoring with LLM semantic explanation.
@@ -129,36 +127,9 @@ Rigorous adversarial testing, multi-factor reasoning verification, and productio
 
 ---
 
-## 📊 Comprehensive Test Suite & Benchmark Results
+## ✅ Verification
 
-Sentinel Nova undergoes continuous end-to-end verification across **456 automated test assertions** executed on a TypeScript 5.8 runtime:
-
-| Suite | Component / Agent | Assertions | Passed | Failed | Status |
-|:---|:---|:---:|:---:|:---:|:---:|
-| **Suite 1** | Day 6 Intelligence Validation & Hardening (`day6Validation.test.ts`) | 69 | 69 | 0 | 🟢 100% |
-| **Suite 2** | Chief of Staff UX & Conversational Orchestration (`novaChiefOfStaffUX.test.ts`) | 79 | 79 | 0 | 🟢 100% |
-| **Suite 3** | Chief of Staff End-to-End Workflow (`chiefOfStaffWorkflow.test.ts`) | 60 | 60 | 0 | 🟢 100% |
-| **Suite 4** | Availability-Aware Scheduler Agent (`schedulerAgentDay5C4.test.ts`) | 61 | 61 | 0 | 🟢 100% |
-| **Suite 5** | Safety Reviewer & Parameter Binding (`reviewerAgent.test.ts`) | 50 | 50 | 0 | 🟢 100% |
-| **Suite 6** | Tool Manager & 11 Hostile Attack Vectors (`toolManager.test.ts`) | 107 | 107 | 0 | 🟢 100% |
-| **Suite 7** | Multi-Agent Orchestrator Runtime (`orchestrator.test.ts`) | 30 | 30 | 0 | 🟢 100% |
-| **Total** | **Comprehensive System Verification** | **456** | **456** | **0** | **🟢 100% PASS** |
-
-👉 **Read the full [Automated Test Suite Report](./docs/TEST_RESULTS.md)** for detailed breakdowns of the 11 security attacks, latency profiles, and edge-case verifications.
-
----
-
-## 🔬 Academic Research Dataset
-
-Sentinel Nova includes an extensive dataset compiled across $N = 1,000$ standardized test scenarios comparing Sentinel Nova against raw zero-shot LLMs and unconstrained ReAct loops.
-
-### Key Benchmark Metrics
-- **Hard Constraint Violations**: **0.0%** for Sentinel Nova vs **24.6%** for raw LLM.
-- **Schedule Feasibility Rate**: **99.6%** vs **71.2%** baseline.
-- **Parameter Tamper Interception**: **100%** detection via cryptographic HMAC-SHA256 bindings.
-- **Runaway Loop Rate**: **0.0%** (guaranteed bounded halting at $k \le 2$).
-
-👉 **Review the complete [Empirical Research Dataset & Mathematical Formulations](./docs/RESEARCH_PAPER_DATA.md)** for formal theorems, statistical significance calculations ($p < 0.0001$), ablation tables, and BibTeX citations.
+The repository provides isolated commands for outcome capture, ML inference, prediction heuristics, LLM response handling, workflow behavior, lint, and production build. Run the commands in the current `package.json`; older assertion totals and benchmark claims are not release evidence. See [AI/ML/LLM root-cause and status](./docs/AI_ML_LLM_ROOT_CAUSE.md) and [ML dataset methodology](./docs/ML_DATASET_METHOD.md) for the current measured status and limitations.
 
 ---
 
@@ -166,7 +137,7 @@ Sentinel Nova includes an extensive dataset compiled across $N = 1,000$ standard
 
 - **Frontend**: React 19, TypeScript, Tailwind CSS, Lucide Icons, Vite
 - **Backend Runtime**: Node.js 22, Express, TypeScript (`tsx` execution)
-- **AI & Reasoning**: Google Gemini 2.5 Flash via modern `@google/genai` TypeScript SDK
+- **AI & Reasoning**: Optional server-side Google Gemini integration through `@google/genai`; live credentials are required for provider verification
 - **Architecture**: Stateful Deliberative Multi-Agent State Machine (`ChiefOfStaffWorkflowEngine`)
 - **Security & Data**: In-memory & JSON file persistent stores with per-tenant isolation, SHA-256 cryptographic parameter verification
 
@@ -212,7 +183,9 @@ Sentinel-Nova/
 
 ### Prerequisites
 - Node.js $\ge$ 20.x
-- Google Gemini API Key (`GEMINI_API_KEY`)
+- Python 3.10+ and the dependencies in `ml/requirements.txt` are needed only for offline ML artifact tests/inference.
+- Google OAuth web client ID and a long random `AUTH_SECRET` are needed for authenticated app use.
+- `GEMINI_API_KEY` is optional; without it, Gemini-backed enhancements are unavailable and supported deterministic workflows remain available.
 
 ### 1. Installation
 ```bash
@@ -222,11 +195,7 @@ npm install
 ```
 
 ### 2. Environment Setup
-Create a `.env` file in the project root:
-```env
-GEMINI_API_KEY=your_gemini_api_key_here
-PORT=3000
-```
+Copy `.env.example` to `.env`, then set `VITE_GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_ID`, and `AUTH_SECRET`. Use the same Google OAuth **Web application** client ID for both client ID variables, and in Google Cloud Console add `http://localhost:3000` under that client’s **Authorized JavaScript origins**. Google Identity Services sign-in cannot initialize if the origin is not authorized; local readiness checks cannot inspect the Cloud Console setting. Add `http://127.0.0.1:3000` too only if you open the app using that host. Add `GEMINI_API_KEY` only if you want Gemini features. Keep `.env` private and do not place server credentials in `VITE_*` variables.
 
 ### 3. Run Development Server
 ```bash
@@ -234,23 +203,23 @@ npm run dev
 ```
 Navigate to `http://localhost:3000` to access the Sentinel Nova workspace.
 
-### 4. Run the Test Suites
+On Windows, `Open-Sentinel-Nova.bat` checks configuration, dependencies, and both development ports, then opens the API and Vite frontend in separate Command Prompt windows. The split setup serves the frontend at `http://localhost:3000` and proxies `/api` to the API at `http://localhost:3001`. If the readiness check fails, it lists the configuration or setup items to fix. `npm run check:ready` runs the same local checks; `npm run smoke:gemini` makes one small live provider request and reports only a sanitized status.
+
+### 4. Run tests and checks
 ```bash
-# Run Chief of Staff deliberative loop tests
-npx tsx server/agents/tests/chiefOfStaffWorkflow.test.ts
-
-# Run Scheduler multi-strategy tests
-npx tsx server/agents/tests/schedulerAgentDay5C4.test.ts
-
-# Run Safety Reviewer tests
-npx tsx server/agents/tests/reviewerAgent.test.ts
-
-# Run Tool Manager & 11 Hostile Attacks
-npx tsx server/agents/tests/toolManager.test.ts
-
-# Run Orchestrator foundation tests
-npx tsx server/agents/tests/orchestrator.test.ts
+npm run test:isolation
+npm run test:ml:outcomes:http
+npm run test:ml:outcomes
+npm run test:ml:integration
+npm run test:ml
+npm run test:prediction
+npm run test:llm
+npm test
+npm run lint
+npm run build
 ```
+
+The default JSON store is `data/` (override with `SENTINEL_NOVA_DATA_DIR`). It is local, unencrypted, and supports one server process only. Do not share it across workers or instances. Outcome collection is opt-in and remains disabled until a user enables it; verify OS-level permissions on the deployment host before collecting real records. The experimental Jira lead-time model remains disabled by default.
 
 ---
 

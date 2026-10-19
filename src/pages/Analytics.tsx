@@ -96,33 +96,12 @@ export default function Analytics({
             isDark ? 'bg-slate-900/30 border-gray-900' : 'bg-white border-gray-150 shadow-sm'
           }`}>
             <h4 className="text-[10px] font-bold font-mono text-gray-500 uppercase tracking-widest border-b border-gray-800/20 pb-2.5 mb-4 flex items-center justify-between">
-              <span className="flex items-center gap-1.5"><LineChart size={12} className="text-violet-400" /> Multi-Day Productivity Curve Forecast</span>
-              <span className="text-[8px] text-gray-500 font-bold uppercase">Comparing Normal vs AI Cooldown guided</span>
+              <span className="flex items-center gap-1.5"><LineChart size={12} className="text-violet-400" /> Productivity History</span>
+              <span className="text-[8px] text-amber-300 font-bold uppercase">No validated history</span>
             </h4>
 
-            {/* Recharts Double Line Chart */}
-            <div className="h-56 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <ReLineChart
-                  data={burnout.productivityTrend}
-                  margin={{ top: 10, right: 10, left: -25, bottom: 0 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(100, 116, 139, 0.05)" />
-                  <XAxis dataKey="date" stroke="#475569" fontSize={9} tickLine={false} />
-                  <YAxis stroke="#475569" fontSize={9} tickLine={false} domain={[0, 100]} />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: isDark ? 'rgb(15, 23, 42)' : 'white', 
-                      borderColor: 'rgba(100, 116, 139, 0.1)',
-                      fontSize: '9px',
-                      color: isDark ? '#fff' : '#000'
-                    }} 
-                  />
-                  <Legend verticalAlign="top" height={36} iconSize={8} fontSize={10} wrapperStyle={{ fontSize: '10px' }} />
-                  <Line type="monotone" name="Standard (Overloaded) Productivity" dataKey="value" stroke="rgb(239, 68, 68)" strokeWidth={1.5} dot={{ r: 3 }} activeDot={{ r: 5 }} />
-                  <Line type="monotone" name="AI Cooldown Guided Recovery" dataKey="predictedValue" stroke="rgb(16, 185, 129)" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 6 }} />
-                </ReLineChart>
-              </ResponsiveContainer>
+            <div className="flex h-56 items-center justify-center rounded-xl border border-gray-800/15 bg-slate-950/20 p-6 text-center text-xs text-gray-400">
+              Productivity history and a validated forecast are not available yet. Nova will show a trend here when measured history exists.
             </div>
           </div>
 

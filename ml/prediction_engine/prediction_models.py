@@ -1,10 +1,18 @@
 """
 Machine Learning Predictive Models for AEaaS Sentinel Nova
-Defines the structure, training, and inference pipelines for the 10 essential models.
+Defines deterministic heuristic baselines. No fitted models are present in this repository.
 """
 
 import numpy as np
-from typing import Dict, List, Any, Tuple
+from typing import Dict, List, Any
+
+
+def _finite_number(value: Any, default: float) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return default
+    return parsed if np.isfinite(parsed) else default
 
 class TaskCompletionModel:
     """Model 1: Task Completion Probability"""
@@ -13,8 +21,11 @@ class TaskCompletionModel:
         priority_weights = {'low': 0.1, 'medium': 0.25, 'high': 0.45, 'critical': 0.65}
         difficulty_weights = {'easy': 0.9, 'medium': 0.7, 'hard': 0.4}
         
-        pw = priority_weights.get(priority.lower(), 0.3)
-        dw = difficulty_weights.get(difficulty.lower(), 0.6)
+        pw = priority_weights.get(str(priority or 'medium').lower(), 0.25)
+        dw = difficulty_weights.get(str(difficulty or 'medium').lower(), 0.7)
+        est_hours = max(0.0, _finite_number(est_hours, 4.0))
+        past_rate = float(np.clip(_finite_number(past_rate, 80.0), 0.0, 100.0))
+        days_rem = _finite_number(days_rem, 3.0)
         
         # S-Curve based on estimated speed and history
         if days_rem <= 0:
@@ -26,18 +37,23 @@ class TaskCompletionModel:
             score = (past_rate / 100.0) * 0.4 + dw * 0.4 - pw * 0.1 - velocity_penalty
             prob = 1.0 / (1.0 + np.exp(-10 * (score - 0.45)))
             
-        prob = float(np.clip(prob, 0.05, 0.98))
-        confidence = float(0.85 if est_hours > 0 and days_rem > 0 else 0.5)
+        prob = float(np.clip(prob, 0.0, 0.98))
         
         return {
             "probability": prob,
-            "confidence": confidence,
-            "required_velocity_hours_per_day": round(est_hours / max(1, days_rem), 2)
+            "required_velocity_hours_per_day": round(est_hours / max(1, days_rem), 2),
+            "prediction_source": "deterministic_heuristic",
         }
 
 class DeadlineRiskModel:
     """Model 2: Deadline Risk Predictor"""
     def predict(self, completion_probability: float, days_remaining: float, priority: str) -> str:
+        completion_probability = float(np.clip(_finite_number(completion_probability, 0.0), 0.0, 1.0))
+        days_remaining = _finite_number(days_remaining, 0.0)
+        if days_remaining <= 0:
+            return "critical"
+        if days_remaining <= 1 and completion_probability < 0.85:
+            return "high"
         if completion_probability > 0.85:
             return "low"
         elif completion_probability > 0.65:
@@ -123,6 +139,9 @@ class OpportunityMatchModel:
 class GoalSuccessModel:
     """Model 7: Goal Success Probability Estimator"""
     def predict(self, goal_progress: float, days_remaining: float, task_completion_velocity: float) -> Dict[str, Any]:
+        goal_progress = float(np.clip(_finite_number(goal_progress, 0.0), 0.0, 100.0))
+        days_remaining = _finite_number(days_remaining, 0.0)
+        task_completion_velocity = max(0.0, _finite_number(task_completion_velocity, 0.0))
         remaining_progress = 100.0 - goal_progress
         if remaining_progress <= 0:
             return {"success_prob": 1.0, "failure_prob": 0.0}
@@ -162,7 +181,18 @@ class ProductivityTrendModel:
 class BurnoutRiskModel:
     """Model 9: Burnout Classifier and Risk Predictor"""
     def predict(self, work_hours_trend: List[float], off_days: int) -> Dict[str, Any]:
-        mean_hours = np.mean(work_hours_trend) if work_hours_trend else 8.0
+        hours = [_finite_number(value, float('nan')) for value in work_hours_trend] if isinstance(work_hours_trend, list) else []
+        hours = [value for value in hours if np.isfinite(value)]
+        if not hours:
+            return {
+                "burnout_score": None,
+                "risk_level": "unknown",
+                "requires_cooldown": False,
+                "data_sufficiency": "insufficient",
+                "prediction_source": "deterministic_heuristic",
+            }
+        mean_hours = np.mean(hours)
+        off_days = max(0, int(_finite_number(off_days, 0)))
         risk_score = (mean_hours / 12.0) * 80.0 - (off_days * 5.0)
         risk_score = float(np.clip(risk_score, 10.0, 99.0))
         
@@ -171,7 +201,9 @@ class BurnoutRiskModel:
         return {
             "burnout_score": int(risk_score),
             "risk_level": risk_level,
-            "requires_cooldown": risk_level in ["high", "critical"]
+            "requires_cooldown": risk_level in ["high", "critical"],
+            "data_sufficiency": "insufficient_for_trained_prediction",
+            "prediction_source": "deterministic_heuristic",
         }
 
 class RecommendationRankingEngine:

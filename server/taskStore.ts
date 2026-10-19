@@ -1,5 +1,8 @@
 import fs from 'fs/promises';
 import path from 'path';
+import { DATA_DIR } from './dataDirectory';
+import { getPlanningProfile } from './profileStore';
+import { taskOutcomeStore, type OutcomeValueSource } from './mlOutcomeStore';
 
 export type TaskStatus = 'inbox' | 'todo' | 'in_progress' | 'completed' | 'cancelled';
 export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
@@ -42,7 +45,6 @@ export interface ServerTask {
   completedAt?: string | null;
 }
 
-const DATA_DIR = path.join(process.cwd(), 'data');
 const TASKS_FILE = path.join(DATA_DIR, 'tasks.json');
 
 let tasksCache: Record<string, ServerTask[]> | null = null;
@@ -260,7 +262,11 @@ export async function getTaskById(userId: string, taskId: string): Promise<Serve
   return task ? { ...task } : null;
 }
 
-export async function createTask(userId: string, input: Partial<ServerTask>): Promise<ServerTask> {
+export async function createTask(
+  userId: string,
+  input: Partial<ServerTask>,
+  inputSource: OutcomeValueSource = 'unknown',
+): Promise<ServerTask> {
   const store = await loadTasks();
   if (!store[userId]) {
     store[userId] = [];
@@ -306,6 +312,14 @@ export async function createTask(userId: string, input: Partial<ServerTask>): Pr
 
   store[userId].unshift(newTask);
   await persistTasks();
+  if (!isCompleted && status !== 'cancelled') {
+    try {
+      const profile = await getPlanningProfile(userId);
+      await taskOutcomeStore.recordTaskSnapshot(userId, newTask, input, inputSource, profile?.timezone || null);
+    } catch {
+      // Optional ML telemetry must never make ordinary task creation fail.
+    }
+  }
   return { ...newTask };
 }
 
@@ -362,6 +376,13 @@ export async function updateTask(
 
   store[userId][idx] = updatedTask;
   await persistTasks();
+  if (nextStatus === 'completed' && current.status !== 'completed') {
+    try {
+      await taskOutcomeStore.recordTaskCompletion(userId, updatedTask);
+    } catch {
+      // Optional ML telemetry must never make task completion fail.
+    }
+  }
   return { ...updatedTask };
 }
 
@@ -374,6 +395,11 @@ export async function deleteTask(userId: string, taskId: string): Promise<boolea
 
   if (store[userId].length !== initialLen) {
     await persistTasks();
+    try {
+      await taskOutcomeStore.deleteTask(userId, taskId);
+    } catch {
+      // Existing task deletion remains successful if optional telemetry cleanup fails.
+    }
     return true;
   }
   return false;

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   LogOut,
@@ -28,6 +28,46 @@ export default function Settings({ user, onLogout }: SettingsProps) {
   const navigate = useNavigate();
   const { profile, loading } = usePlanningProfile();
   const [activeTab, setActiveTab] = useState<'profile' | 'memory'>('profile');
+  const [outcomeCollectionEnabled, setOutcomeCollectionEnabled] = useState(false);
+  const [outcomeConsentLoading, setOutcomeConsentLoading] = useState(true);
+  const [outcomeConsentSaving, setOutcomeConsentSaving] = useState(false);
+  const [outcomeConsentError, setOutcomeConsentError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/profile/ml-outcome-collection', { credentials: 'include' })
+      .then(async (response) => {
+        if (!response.ok) throw new Error('Unable to load the outcome collection preference.');
+        return response.json() as Promise<{ enabled?: boolean }>;
+      })
+      .then((data) => { if (!cancelled) setOutcomeCollectionEnabled(data.enabled === true); })
+      .catch((error) => { if (!cancelled) setOutcomeConsentError(error instanceof Error ? error.message : 'Unable to load the preference.'); })
+      .finally(() => { if (!cancelled) setOutcomeConsentLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const updateOutcomeCollection = async (enabled: boolean) => {
+    setOutcomeConsentSaving(true);
+    setOutcomeConsentError(null);
+    try {
+      const response = await fetch('/api/profile/ml-outcome-collection', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ enabled }),
+      });
+      const data = await response.json().catch(() => ({})) as { enabled?: boolean };
+      if (!response.ok) {
+        if (typeof data.enabled === 'boolean') setOutcomeCollectionEnabled(data.enabled);
+        throw new Error('Unable to update the outcome collection preference.');
+      }
+      setOutcomeCollectionEnabled(data.enabled === true);
+    } catch (error) {
+      setOutcomeConsentError(error instanceof Error ? error.message : 'Unable to update the preference.');
+    } finally {
+      setOutcomeConsentSaving(false);
+    }
+  };
 
   return (
     <div className="mx-auto max-w-4xl space-y-8">
@@ -257,6 +297,29 @@ export default function Settings({ user, onLogout }: SettingsProps) {
           )}
         </div>
       )}
+
+      <section className="rounded-2xl border border-slate-800 bg-slate-900/70 p-6" aria-labelledby="ml-outcomes-title">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="max-w-2xl">
+            <h2 id="ml-outcomes-title" className="text-base font-semibold text-white">Optional task outcome data</h2>
+            <p className="mt-2 text-xs leading-5 text-slate-400">
+              If enabled, Nova stores a small snapshot of task fields when new tasks are created and records the time when you mark them complete. It excludes task titles, descriptions, tags, and AI reasoning. The data stays in this app’s local user-scoped store and is not used to rank tasks. Turning this off deletes your collected outcome records.
+            </p>
+          </div>
+          <label className="inline-flex shrink-0 items-center gap-3 text-sm text-slate-200">
+            <input
+              type="checkbox"
+              checked={outcomeCollectionEnabled}
+              disabled={outcomeConsentLoading || outcomeConsentSaving}
+              onChange={(event) => void updateOutcomeCollection(event.target.checked)}
+              className="h-4 w-4 accent-violet-500"
+              aria-label="Allow optional task outcome data collection"
+            />
+            <span>{outcomeConsentSaving ? 'Saving…' : outcomeCollectionEnabled ? 'Enabled' : 'Disabled'}</span>
+          </label>
+        </div>
+        {outcomeConsentError && <p role="alert" className="mt-3 text-xs text-rose-300">{outcomeConsentError}</p>}
+      </section>
     </div>
   );
 }

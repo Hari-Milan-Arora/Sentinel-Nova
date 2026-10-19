@@ -5,14 +5,27 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
+    "dev:server": "tsx server.ts",
+    "dev:frontend": "vite --host 127.0.0.1 --port 3000 --strictPort",
+    "check:ready": "node scripts/check-readiness.mjs",
+    "smoke:gemini": "node scripts/smoke-gemini.mjs",
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
     "start": "node dist/server.cjs",
     "lint": "tsc --noEmit",
-    "test": "tsx server/agents/tests/day7Validation.test.ts && tsx server/agents/tests/day6Validation.test.ts && tsx server/agents/tests/novaChiefOfStaffUX.test.ts && tsx server/agents/tests/chiefOfStaffWorkflow.test.ts"
+    "test": "tsx server/agents/tests/runIsolated.ts server/agents/tests/day7Validation.test.ts && tsx server/agents/tests/runIsolated.ts server/agents/tests/day6Validation.test.ts && tsx server/agents/tests/runIsolated.ts server/agents/tests/novaChiefOfStaffUX.test.ts && tsx server/agents/tests/runIsolated.ts server/agents/tests/chiefOfStaffWorkflow.test.ts",
+    "test:ml": "python -m unittest discover -s ml/tests",
+    "test:ml:integration": "tsx server/agents/tests/runIsolated.ts server/agents/tests/taskLeadTime.integration.test.ts",
+    "test:ml:outcomes": "tsx server/agents/tests/runIsolated.ts server/agents/tests/mlOutcomeStore.test.ts",
+    "test:ml:outcomes:http": "tsx server/agents/tests/runIsolated.ts server/agents/tests/mlOutcomeHttp.integration.test.ts",
+    "test:llm": "tsx server/agents/tests/runIsolated.ts server/agents/tests/geminiRouter.test.ts && tsx server/agents/tests/runIsolated.ts server/agents/tests/llmStructuredOutput.test.ts",
+    "test:prediction": "tsx server/agents/tests/runIsolated.ts server/agents/tests/predictionEngine.test.ts",
+    "test:isolation": "tsx server/agents/tests/runIsolated.ts server/agents/tests/testDataIsolation.test.ts"
   },
   "dependencies": {
     "@google/genai": "^2.10.0",
+    "dotenv": "^16.6.1",
     "express": "^4.18.3",
+    "google-auth-library": "^10.9.1",
     "lucide-react": "^0.344.0",
     "motion": "^11.11.17",
     "react": "^18.3.1",

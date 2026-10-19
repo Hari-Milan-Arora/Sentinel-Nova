@@ -1,6 +1,6 @@
 """
 Single-Query Prediction Inference Tool
-Processes user query payloads and outputs fully quantified predictions.
+Runs illustrative heuristic inference on a fixed sample payload. It is not connected to a user account.
 """
 
 import sys
@@ -12,7 +12,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')
 from ml.prediction_engine.prediction_service import PredictionService
 
 def run_test_inference():
-    print("Executing single-record inference pass on active digital twin context...")
+    print("Executing illustrative inference on a sample planning context (not real user history)...")
     
     # Define a test sample user context
     test_user_context = {

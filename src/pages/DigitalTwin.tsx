@@ -27,14 +27,12 @@ import { BurnoutMetrics, PredictionEngineMetrics } from '../types';
 interface DigitalTwinProps {
   burnout: BurnoutMetrics;
   engineStats: PredictionEngineMetrics;
-  onUpdateWeights: (weights: Record<string, number>) => void;
   isDark: boolean;
 }
 
 export default function DigitalTwin({
   burnout,
   engineStats,
-  onUpdateWeights,
   isDark
 }: DigitalTwinProps) {
   // Behavior pattern weights states
@@ -43,43 +41,24 @@ export default function DigitalTwin({
   const [relaxationFactor, setRelaxationFactor] = React.useState(60);
   const [attentionFocus, setAttentionFocus] = React.useState(85);
 
-  const [isUpdating, setIsUpdating] = React.useState(false);
-
   const handleWeightChange = (key: string, val: number) => {
-    let currentWeights = { workloadLimit, learningVelocity, relaxationFactor, attentionFocus };
     if (key === 'workloadLimit') {
       setWorkloadLimit(val);
-      currentWeights.workloadLimit = val;
     } else if (key === 'learningVelocity') {
       setLearningVelocity(val);
-      currentWeights.learningVelocity = val;
     } else if (key === 'relaxationFactor') {
       setRelaxationFactor(val);
-      currentWeights.relaxationFactor = val;
     } else if (key === 'attentionFocus') {
       setAttentionFocus(val);
-      currentWeights.attentionFocus = val;
     }
-
-    onUpdateWeights(currentWeights);
   };
 
-  const triggerReset = async () => {
-    setIsUpdating(true);
-    await new Promise(resolve => setTimeout(resolve, 600));
+  const triggerReset = () => {
     setWorkloadLimit(8);
     setLearningVelocity(75);
     setRelaxationFactor(60);
     setAttentionFocus(85);
-    onUpdateWeights({ workloadLimit: 8, learningVelocity: 75, relaxationFactor: 60, attentionFocus: 85 });
-    setIsUpdating(false);
   };
-
-  const predictionAuditHistory = [
-    { id: "audit_1", date: "June 28", model: "Task Completion Model", prediction: "Predicts task 'fine-tune' completion by Thursday", actualOutcome: "Completed Thursday 16:30", deviation: "0.0 days (100% accurate)", status: "verified" },
-    { id: "audit_2", date: "June 25", model: "Deadline Risk Classifier", prediction: "Goal 'CV Audit' predicted at high risk of delay", actualOutcome: "Progress stagnated, delay verified", deviation: "Verified delay", status: "verified" },
-    { id: "audit_3", date: "June 20", model: "Burnout Risk Classifier", prediction: "Burnout risk predicted at Critical (Score 88)", actualOutcome: "Productivity dropped by 22%", deviation: "Confirmed overload", status: "verified" }
-  ];
 
   return (
     <div className="space-y-6">
@@ -89,17 +68,16 @@ export default function DigitalTwin({
         <div className="space-y-1">
           <h2 className="text-lg font-bold font-space tracking-tight">Digital Twin Behavior Optimizer</h2>
           <p className="text-xs text-gray-400">
-            Calibrating behavioral parameters and monitoring predictive alignment statistics against historical task logs.
+            Experimental local preview only. These sliders are not saved and do not change Nova's planner; displayed forecasts are heuristic estimates, not trained model predictions.
           </p>
         </div>
 
         <button
           onClick={triggerReset}
-          disabled={isUpdating}
           className="px-3.5 py-1.5 rounded-xl border border-gray-800 text-[10px] font-mono font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer hover:bg-gray-800/10"
         >
-          <RefreshCw size={12} className={isUpdating ? 'animate-spin' : ''} />
-          {isUpdating ? 'Recalibrating...' : 'Reset Core Model'}
+          <RefreshCw size={12} />
+          Reset local sliders
         </button>
       </div>
 
@@ -190,26 +168,26 @@ export default function DigitalTwin({
             isDark ? 'bg-slate-900/30 border-gray-900' : 'bg-white border-gray-150 shadow-sm'
           }`}>
             <h4 className="text-[10px] font-bold font-mono text-gray-500 uppercase tracking-widest border-b border-gray-800/20 pb-2.5 mb-4 flex items-center justify-between">
-              <span className="flex items-center gap-1.5"><Cpu size={12} className="text-violet-400" /> Active Simulation Stats</span>
-              <span className="text-[8px] font-mono text-emerald-400 font-bold uppercase bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">Active</span>
+              <span className="flex items-center gap-1.5"><Cpu size={12} className="text-violet-400" /> Prediction Status</span>
+              <span className="text-[8px] font-mono text-amber-300 font-bold uppercase bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">Not validated</span>
             </h4>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center text-xs font-mono">
               <div className="p-3 bg-slate-950/20 rounded-xl border border-gray-800/10">
-                <span className="text-gray-500 block text-[9px] uppercase font-bold mb-1">Mean Accuracy</span>
-                <span className="text-sm font-bold text-white">{engineStats.historicalAccuracy}%</span>
+                <span className="text-gray-500 block text-[9px] uppercase font-bold mb-1">Prediction source</span>
+                <span className="text-sm font-bold text-white">Heuristic</span>
               </div>
               <div className="p-3 bg-slate-950/20 rounded-xl border border-gray-800/10">
-                <span className="text-gray-500 block text-[9px] uppercase font-bold mb-1">Model F1</span>
-                <span className="text-sm font-bold text-violet-400">{engineStats.f1Score}%</span>
+                <span className="text-gray-500 block text-[9px] uppercase font-bold mb-1">Trained model</span>
+                <span className="text-sm font-bold text-violet-400">None</span>
               </div>
               <div className="p-3 bg-slate-950/20 rounded-xl border border-gray-800/10">
-                <span className="text-gray-500 block text-[9px] uppercase font-bold mb-1">Drift Index</span>
-                <span className="text-sm font-bold text-amber-400">{engineStats.predictionDrift}</span>
+                <span className="text-gray-500 block text-[9px] uppercase font-bold mb-1">Validation data</span>
+                <span className="text-sm font-bold text-amber-400">Unavailable</span>
               </div>
               <div className="p-3 bg-slate-950/20 rounded-xl border border-gray-800/10">
-                <span className="text-gray-500 block text-[9px] uppercase font-bold mb-1">Precision</span>
-                <span className="text-sm font-bold text-white">{engineStats.precision}%</span>
+                <span className="text-gray-500 block text-[9px] uppercase font-bold mb-1">Duration model</span>
+                <span className="text-sm font-bold text-white">Not implemented</span>
               </div>
             </div>
           </div>
@@ -219,32 +197,15 @@ export default function DigitalTwin({
             isDark ? 'bg-slate-900/30 border-gray-900' : 'bg-white border-gray-150 shadow-sm'
           }`}>
             <div className="space-y-4">
-              <h4 className="text-[10px] font-bold font-mono text-gray-500 uppercase tracking-widest border-b border-gray-800/20 pb-2.5 flex items-center gap-1.5">
+                <h4 className="text-[10px] font-bold font-mono text-gray-500 uppercase tracking-widest border-b border-gray-800/20 pb-2.5 flex items-center gap-1.5">
                 <UserCheck size={12} className="text-violet-400" />
-                Independent Prediction Audit Log
+                Prediction Evaluation History
               </h4>
 
               <div className="space-y-3">
-                {predictionAuditHistory.map(log => (
-                  <div key={log.id} className="p-3 bg-slate-950/25 rounded-xl border border-gray-800/15 space-y-1.5 text-[11px]">
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-gray-200">{log.model}</span>
-                      <span className="text-[9px] font-mono text-emerald-400 font-bold uppercase bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
-                        {log.status}
-                      </span>
-                    </div>
-
-                    <div className="text-gray-400">
-                      <div>Prediction: <span className="font-medium text-white">{log.prediction}</span></div>
-                      <div className="mt-0.5">Outcome: <span className="font-medium text-white">{log.actualOutcome}</span></div>
-                    </div>
-
-                    <div className="flex justify-between text-[9px] font-mono text-gray-500 border-t border-gray-800/5 pt-1.5">
-                      <span>Log date: {log.date}</span>
-                      <span>Deviation: <span className="text-emerald-400 font-semibold">{log.deviation}</span></span>
-                    </div>
-                  </div>
-                ))}
+                <p className="rounded-xl border border-gray-800/15 bg-slate-950/25 p-3 text-xs text-gray-400">
+                  No verified prediction outcomes are available yet. Heuristic estimates are not recorded as model predictions.
+                </p>
               </div>
             </div>
           </div>

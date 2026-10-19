@@ -13,6 +13,7 @@
 
 import { GoogleGenAI } from '@google/genai';
 import {
+  GeminiFailureCategory,
   RouterCallRequest,
   RouterCallResult,
   RouterOptions,
@@ -25,7 +26,62 @@ import {
   DEFAULT_ROUTER_TIMEOUT_MS,
   DEFAULT_COOLDOWN_MS,
 } from './geminiModels';
-import { GeminiRateLimiter, geminiRateLimiter } from './geminiRateLimiter';
+import { GeminiRateLimiter } from './geminiRateLimiter';
+
+const MAX_REQUEST_CHARS = 40000;
+const MAX_RETRY_AFTER_MS = 10000;
+
+function normalizeApiKey(value: string | undefined): string | undefined {
+  const key = value?.trim();
+  if (!key || /^(your[-_ ]|replace[-_ ])/i.test(key)) return undefined;
+  return key;
+}
+
+function getStatus(error: unknown): number | undefined {
+  const candidate = error as { status?: unknown; statusCode?: unknown; code?: unknown };
+  const status = Number(candidate?.status ?? candidate?.statusCode ?? candidate?.code);
+  return Number.isInteger(status) && status >= 100 && status <= 599 ? status : undefined;
+}
+
+function classifyFailure(error: unknown): GeminiFailureCategory {
+  const status = getStatus(error);
+  const message = String((error as { message?: unknown })?.message ?? error ?? '').toLowerCase();
+  if (status === 401 || status === 403 || message.includes('api key not valid')) return 'authentication';
+  if (status === 400 || status === 422) return 'invalid_request';
+  if (status === 404 || message.includes('model not found') || message.includes('unsupported model')) return 'unsupported_model';
+  if (status === 429 || message.includes('resource_exhausted') || message.includes('quota')) {
+    return message.includes('quota') || message.includes('resource_exhausted') ? 'quota_exhausted' : 'rate_limit';
+  }
+  if (status && status >= 500) return 'provider_transient';
+  if (message.includes('timeout') || message.includes('timed out') || message.includes('abort')) return 'timeout';
+  if (message.includes('safety') || message.includes('blocked')) return 'safety_refusal';
+  if (message.includes('fetch failed') || message.includes('econnreset') || message.includes('network')) return 'provider_transient';
+  return 'unknown';
+}
+
+function readRetryAfterMs(error: unknown): number | undefined {
+  const value = error as { headers?: unknown; response?: { headers?: unknown } };
+  const headers = value?.headers ?? value?.response?.headers;
+  const get = (name: string): string | null => {
+    if (headers && typeof (headers as { get?: unknown }).get === 'function') {
+      return (headers as { get(key: string): string | null }).get(name);
+    }
+    if (headers && typeof headers === 'object') {
+      const entry = Object.entries(headers as Record<string, unknown>).find(([key]) => key.toLowerCase() === name);
+      return entry ? String(entry[1]) : null;
+    }
+    return null;
+  };
+  const milliseconds = Number(get('retry-after-ms'));
+  if (Number.isFinite(milliseconds) && milliseconds >= 0) return Math.min(milliseconds, MAX_RETRY_AFTER_MS);
+  const secondsOrDate = get('retry-after');
+  if (!secondsOrDate) return undefined;
+  const seconds = Number(secondsOrDate);
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.min(seconds * 1000, MAX_RETRY_AFTER_MS);
+  const date = Date.parse(secondsOrDate);
+  if (Number.isFinite(date)) return Math.min(Math.max(0, date - Date.now()), MAX_RETRY_AFTER_MS);
+  return undefined;
+}
 
 export class GeminiModelRouter {
   private modelPool: string[];
@@ -41,18 +97,18 @@ export class GeminiModelRouter {
     this.modelPool = options?.modelPool || getGeminiModelPool();
     this.maxAttempts = options?.maxModelAttempts || config.maxAttempts || DEFAULT_MAX_MODEL_ATTEMPTS;
     this.defaultTimeoutMs = options?.routerTimeoutMs || config.timeoutMs || DEFAULT_ROUTER_TIMEOUT_MS;
-    this.rateLimiter = options?.maxRpmPerModel
-      ? new GeminiRateLimiter(options.maxRpmPerModel)
-      : geminiRateLimiter;
-    this.apiKey = options?.apiKey || process.env.GEMINI_API_KEY;
+    this.rateLimiter = new GeminiRateLimiter(options?.maxRpmPerModel ?? config.maxRpm);
+    this.apiKey = normalizeApiKey(options?.apiKey ?? process.env.GEMINI_API_KEY);
+    this.aiClient = options?.client || null;
 
     // Construction MUST be non-blocking and safe:
     // No network requests, no model enumeration, no initial API call.
-    if (this.apiKey) {
+    if (!this.aiClient && this.apiKey) {
       try {
         this.aiClient = new GoogleGenAI({ apiKey: this.apiKey });
-      } catch (err) {
-        console.warn('GeminiModelRouter: Client initialization warning:', err);
+      } catch {
+        // Keep provider initialization details out of logs; the call boundary
+        // returns a sanitized failure category to its caller.
       }
     }
   }
@@ -128,37 +184,52 @@ export class GeminiModelRouter {
     request: RouterCallRequest,
     options?: { timeoutMs?: number; maxAttempts?: number }
   ): Promise<RouterCallResult> {
-    // 1. Guard against missing pool
-    if (this.modelPool.length === 0) {
-      return {
-        ok: false,
-        exhausted: true,
-        attempts: 0,
-        reason: 'no_compatible_models_available',
-        error: 'Model pool is empty',
-      };
+    const startedAt = Date.now();
+    const fail = (failureCategory: GeminiFailureCategory, reason: string, retryCount = 0): RouterCallResult => ({
+      ok: false,
+      exhausted: true,
+      attempts: retryCount,
+      retryCount,
+      reason,
+      error: reason,
+      failureCategory,
+      latencyMs: Date.now() - startedAt,
+    });
+
+    let contents: string;
+    try {
+      contents = typeof request?.contents === 'string'
+        ? request.contents
+        : JSON.stringify(request?.contents);
+    } catch {
+      return fail('invalid_request', 'invalid_request');
+    }
+    if (typeof contents !== 'string' || contents.trim().length === 0) {
+      return fail('invalid_request', 'invalid_request');
+    }
+    if (contents.length > MAX_REQUEST_CHARS) {
+      return fail('oversized_context', 'oversized_context');
     }
 
+    if (this.modelPool.length === 0) {
+      return fail('unsupported_model', 'no_compatible_models_available');
+    }
+    if (!this.apiKey && !this.aiClient) {
+      return fail('missing_configuration', 'no_api_key');
+    }
+
+    // 1. Guard against missing pool
     // 2. Guard against missing API client/key
     if (!this.aiClient) {
-      if (process.env.GEMINI_API_KEY) {
+      const runtimeApiKey = normalizeApiKey(process.env.GEMINI_API_KEY);
+      if (runtimeApiKey) {
         try {
-          this.aiClient = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+          this.aiClient = new GoogleGenAI({ apiKey: runtimeApiKey });
         } catch {
-          return {
-            ok: false,
-            exhausted: true,
-            attempts: 0,
-            reason: 'client_initialization_failed',
-          };
+        return fail('missing_configuration', 'client_initialization_failed');
         }
       } else {
-        return {
-          ok: false,
-          exhausted: true,
-          attempts: 0,
-          reason: 'no_api_key',
-        };
+        return fail('missing_configuration', 'no_api_key');
       }
     }
 
@@ -169,19 +240,13 @@ export class GeminiModelRouter {
     const timeoutMs = options?.timeoutMs || request.config?.timeoutMs || this.defaultTimeoutMs;
     const deadline = Date.now() + timeoutMs;
 
-    let lastError: string | undefined;
+    let lastFailureCategory: GeminiFailureCategory | undefined;
 
     // Circular execution loop with strictly bounded attempts and deadline
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       const now = Date.now();
       if (now >= deadline) {
-        return {
-          ok: false,
-          exhausted: true,
-          attempts: attempt - 1,
-          reason: 'deadline_exceeded',
-          error: 'Request deadline exceeded before completion',
-        };
+      return fail('timeout', 'deadline_exceeded', attempt - 1);
       }
 
       // Find next eligible candidate model
@@ -193,17 +258,12 @@ export class GeminiModelRouter {
         const remainingTime = deadline - now;
 
         if (minWait === Infinity || remainingTime <= minWait || remainingTime <= 100) {
-          return {
-            ok: false,
-            exhausted: true,
-            attempts: attempt - 1,
-            reason: 'all_models_unavailable',
-            error: lastError || 'All models in pool are rate-limited or in cooldown',
-          };
+          const category = lastFailureCategory || 'all_models_unavailable';
+          return fail(category, category === 'unsupported_model' ? 'unsupported_model' : 'all_models_unavailable', attempt - 1);
         }
 
         // Bounded sleep until next model is available or deadline expires
-        const sleepMs = Math.min(minWait, remainingTime - 50);
+        const sleepMs = Math.min(minWait, remainingTime - 50, MAX_RETRY_AFTER_MS);
         await new Promise((resolve) => setTimeout(resolve, sleepMs));
         continue;
       }
@@ -212,34 +272,32 @@ export class GeminiModelRouter {
 
       try {
         // Compute per-attempt remaining timeout
-        const perAttemptTimeout = Math.max(200, deadline - Date.now());
+        const perAttemptTimeout = Math.max(1, deadline - Date.now());
 
         let timeoutHandle: NodeJS.Timeout | null = null;
+        const abortController = new AbortController();
         const timeoutPromise = new Promise<never>((_, reject) => {
           timeoutHandle = setTimeout(() => {
-            reject(new Error(`Model ${selectedModel} timed out (${perAttemptTimeout}ms)`));
+            abortController.abort();
+            reject(new Error('Gemini request timed out'));
           }, perAttemptTimeout);
         });
 
-        const contents =
-          typeof request.contents === 'string'
-            ? request.contents
-            : JSON.stringify(request.contents);
-
-        const promptText = request.systemInstruction
-          ? `${request.systemInstruction}\n\n${contents}`
-          : contents;
-
         const apiPromise = this.aiClient.models.generateContent({
           model: selectedModel,
-          contents: promptText,
-          config: request.config
-            ? {
-                responseMimeType: request.config.responseMimeType,
-                temperature: request.config.temperature,
-                maxOutputTokens: request.config.maxOutputTokens,
-              }
-            : undefined,
+          contents,
+          config: {
+            systemInstruction: request.systemInstruction,
+            responseMimeType: request.config?.responseMimeType,
+            responseJsonSchema: request.config?.responseJsonSchema,
+            temperature: request.config?.temperature,
+            maxOutputTokens: request.config?.maxOutputTokens ?? 512,
+            abortSignal: abortController.signal,
+            httpOptions: {
+              timeout: perAttemptTimeout,
+              retryOptions: { attempts: 1 },
+            },
+          },
         });
 
         const response = await Promise.race([apiPromise, timeoutPromise]).finally(() => {
@@ -248,6 +306,22 @@ export class GeminiModelRouter {
           }
         });
 
+        const blocked = response?.promptFeedback?.blockReason || response?.candidates?.some(
+          (candidate) => String(candidate?.finishReason || '').toUpperCase().includes('SAFETY')
+        );
+        if (blocked) {
+          return {
+            ok: false,
+            exhausted: true,
+            attempts: attempt,
+            retryCount: attempt - 1,
+            reason: 'safety_refusal',
+            error: 'safety_refusal',
+            failureCategory: 'safety_refusal',
+            modelUsed: selectedModel,
+            latencyMs: Date.now() - startedAt,
+          };
+        }
         const text = response?.text ? response.text.trim() : '';
         if (text) {
           return {
@@ -255,44 +329,43 @@ export class GeminiModelRouter {
             text,
             modelUsed: selectedModel,
             attempts: attempt,
+            retryCount: attempt - 1,
+            latencyMs: Date.now() - startedAt,
           };
         }
 
         // Empty response: advance to next model
-        lastError = `Empty response from ${selectedModel}`;
+        lastFailureCategory = 'malformed_response';
       } catch (err: any) {
-        const errorMsg = String(err?.message || err || '');
-        lastError = errorMsg;
+        const failureCategory = classifyFailure(err);
+        lastFailureCategory = failureCategory;
 
         // Check for 429 Quota / Rate Limit
-        if (
-          errorMsg.includes('429') ||
-          errorMsg.includes('RESOURCE_EXHAUSTED') ||
-          errorMsg.includes('quota')
-        ) {
-          // Put model on 30s cooldown and rotate immediately to next circular model
-          this.rateLimiter.recordCooldown(selectedModel, DEFAULT_COOLDOWN_MS);
-        } else if (
-          errorMsg.includes('404') ||
-          errorMsg.includes('NOT_FOUND') ||
-          errorMsg.includes('not found') ||
-          errorMsg.includes('deprecated')
-        ) {
+        if (failureCategory === 'rate_limit' || failureCategory === 'quota_exhausted') {
+          this.rateLimiter.recordCooldown(
+            selectedModel,
+            readRetryAfterMs(err) ?? DEFAULT_COOLDOWN_MS
+          );
+        } else if (failureCategory === 'unsupported_model') {
           // Model unavailable/invalid: mark unavailable so it won't be retried
           this.rateLimiter.markUnavailable(selectedModel);
+        } else if (
+          failureCategory === 'authentication' ||
+          failureCategory === 'invalid_request' ||
+          failureCategory === 'safety_refusal' ||
+          failureCategory === 'oversized_context'
+        ) {
+          return fail(failureCategory, failureCategory, attempt);
+        } else if (failureCategory !== 'provider_transient' && failureCategory !== 'timeout') {
+          return fail(failureCategory, 'provider_error', attempt);
         }
 
         // Pointer was already advanced during reservation, loop continues to next attempt
       }
     }
 
-    return {
-      ok: false,
-      exhausted: true,
-      attempts: maxAttempts,
-      reason: 'max_attempts_exceeded',
-      error: lastError || 'Exhausted maximum model attempts',
-    };
+    const lastFailure = lastFailureCategory || 'unknown';
+    return fail(lastFailure, 'max_attempts_exceeded', maxAttempts);
   }
 }
 

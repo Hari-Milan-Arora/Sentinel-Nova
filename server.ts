@@ -1,9 +1,12 @@
+import "dotenv/config";
 import express from "express";
 import path from "path";
 import crypto from "crypto";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
-import { getPlanningProfile, savePlanningProfile, validatePlanningProfile } from "./server/profileStore";
+import { OAuth2Client, type TokenPayload } from "google-auth-library";
+import { getPlanningProfile, savePlanningProfile, setMlOutcomeCollectionPreference, validatePlanningProfile } from "./server/profileStore";
+import { taskOutcomeStore } from "./server/mlOutcomeStore";
 import {
   getTasksByUser,
   getActiveTasksByUser,
@@ -108,6 +111,7 @@ export {
 
 const AUTH_COOKIE = "sentinel_session";
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
+const googleIdTokenVerifier = new OAuth2Client();
 
 type AuthUser = { id: string; email: string; name: string; picture?: string };
 
@@ -181,7 +185,9 @@ function requireAuth(req: express.Request, res: express.Response, next: express.
 async function startServer() {
   const app = express();
   app.set("trust proxy", 1);
-  const PORT = Number(process.env.PORT || 3000);
+  console.warn("Deployment constraint: JSON-backed stores support one server process on one local filesystem; do not run multiple instances or workers against the same data directory.");
+  const apiOnly = process.env.SENTINEL_NOVA_API_ONLY === "true";
+  const PORT = Number(process.env.PORT || (apiOnly ? 3001 : 3000));
   app.use(express.json({ limit: "10mb" }));
 
   app.get("/api/auth/me", (req, res) => {
@@ -193,19 +199,26 @@ async function startServer() {
   app.post("/api/auth/google", async (req, res) => {
     try {
       const { credential } = req.body as { credential?: string };
-      const rawClientId = process.env.GOOGLE_CLIENT_ID || process.env.VITE_GOOGLE_CLIENT_ID;
-      const clientId = rawClientId?.trim();
+      const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
       if (!clientId) return res.status(503).json({ error: "Google authentication is not configured on the server." });
       if (!credential) return res.status(400).json({ error: "Missing Google credential." });
 
-      const response = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`);
-      if (!response.ok) return res.status(401).json({ error: "Google credential could not be verified." });
-      const token = await response.json() as { aud?: string; sub?: string; email?: string; email_verified?: string | boolean; name?: string; picture?: string; exp?: string };
-      if (token.aud?.trim() !== clientId || !token.sub || !token.email || String(token.email_verified) !== "true") {
-        return res.status(401).json({ error: "Google identity verification failed." });
+      let token: TokenPayload | null | undefined;
+      try {
+        const ticket = await googleIdTokenVerifier.verifyIdToken({ idToken: credential, audience: clientId });
+        token = ticket.getPayload();
+      } catch (verificationError) {
+        const error = verificationError as { code?: unknown; response?: { status?: unknown }; message?: unknown };
+        const status = Number(error.response?.status);
+        const code = String(error.code ?? "");
+        if ((Number.isInteger(status) && status >= 500) || /^(ECONN|ETIMEDOUT|ENOTFOUND)/.test(code)) {
+          console.warn("Google identity verification service is temporarily unavailable.");
+          return res.status(503).json({ error: "Google sign-in verification is temporarily unavailable. Please retry." });
+        }
+        return res.status(401).json({ error: "Google credential is invalid or does not match this application." });
       }
-      if (token.exp && Number(token.exp) < Math.floor(Date.now() / 1000)) {
-        return res.status(401).json({ error: "Google credential has expired." });
+      if (!token?.sub || !token.email || token.email_verified !== true) {
+        return res.status(401).json({ error: "Google identity verification failed." });
       }
 
       const user: AuthUser = { id: token.sub, email: token.email, name: token.name || token.email.split("@")[0], picture: token.picture };
@@ -224,8 +237,8 @@ async function startServer() {
       const user = (req as express.Request & { user: AuthUser }).user;
       const profile = await getPlanningProfile(user.id);
       res.json({ profile });
-    } catch (err) {
-      console.error("Failed to fetch planning profile:", err);
+    } catch {
+      console.error("Failed to fetch planning profile.");
       res.status(500).json({ error: "Failed to fetch planning profile." });
     }
   });
@@ -239,8 +252,8 @@ async function startServer() {
       }
       const profile = await savePlanningProfile(user.id, req.body);
       res.json({ profile });
-    } catch (err) {
-      console.error("Failed to save planning profile:", err);
+    } catch {
+      console.error("Failed to save planning profile.");
       res.status(500).json({ error: "Failed to save planning profile." });
     }
   });
@@ -254,9 +267,42 @@ async function startServer() {
       }
       const profile = await savePlanningProfile(user.id, req.body);
       res.json({ profile });
-    } catch (err) {
-      console.error("Failed to update planning profile:", err);
+    } catch {
+      console.error("Failed to update planning profile.");
       res.status(500).json({ error: "Failed to update planning profile." });
+    }
+  });
+
+  // Explicit opt-in for minimal task outcome snapshots used only for future ML evaluation.
+  app.get("/api/profile/ml-outcome-collection", requireAuth, async (req, res) => {
+    try {
+      const user = (req as express.Request & { user: AuthUser }).user;
+      const profile = await getPlanningProfile(user.id);
+      res.json({ enabled: profile?.mlOutcomeCollectionEnabled === true, optedInAt: profile?.mlOutcomeCollectionOptedInAt || null });
+    } catch {
+      res.status(500).json({ error: "Unable to read ML outcome collection preference." });
+    }
+  });
+
+  app.put("/api/profile/ml-outcome-collection", requireAuth, async (req, res) => {
+    try {
+      const user = (req as express.Request & { user: AuthUser }).user;
+      if (!req.body || typeof req.body !== "object" || Array.isArray(req.body) ||
+          Object.keys(req.body).length !== 1 || typeof req.body.enabled !== "boolean") {
+        return res.status(400).json({ error: "Request body must contain only a boolean enabled field." });
+      }
+      const profile = await setMlOutcomeCollectionPreference(user.id, req.body.enabled);
+      // Disable collection first; then erase this user's optional ML records.
+      if (!req.body.enabled) {
+        try {
+          await taskOutcomeStore.clearForUser(user.id);
+        } catch {
+          return res.status(500).json({ enabled: false, error: "Collection is disabled, but stored outcome data could not be erased." });
+        }
+      }
+      res.json({ enabled: profile.mlOutcomeCollectionEnabled === true, optedInAt: profile.mlOutcomeCollectionOptedInAt || null });
+    } catch {
+      res.status(500).json({ error: "Unable to update ML outcome collection preference." });
     }
   });
 
@@ -305,7 +351,7 @@ async function startServer() {
         }
       }
 
-      const task = await createTask(user.id, req.body);
+      const task = await createTask(user.id, req.body, 'user_entered');
       res.status(201).json({ task });
     } catch (err) {
       console.error("Failed to create task:", err);
@@ -741,7 +787,10 @@ async function startServer() {
   }
 
   app.post("/api/chat", requireAuth, async (req, res) => {
-    const { message, tasks, goals } = req.body;
+    const message = typeof req.body?.message === "string" ? req.body.message.trim() : "";
+    if (!message || message.length > 2000) {
+      return res.status(400).json({ error: "Provide a message between 1 and 2000 characters." });
+    }
     try {
       // Natural Language Nova Chat Scheduling Intent Routing (Day 5B.4)
       if (isSchedulingIntent(message)) {
@@ -775,33 +824,22 @@ async function startServer() {
             const altText = evalItem.alternativeWindows?.[0]
               ? `\n\nAlternative: ${evalItem.alternativeWindows[0].window.startFormatted}–${evalItem.alternativeWindows[0].window.endFormatted}.`
               : "";
-            const confidencePct = Math.round((evalItem.confidence || best.score) * 100);
             const rationale =
               evalItem.reasoning ||
               (evalItem as any).rationale ||
-              "It fits your preferred focus period, avoids calendar conflicts, and gives the task enough uninterrupted time.";
+              "Selected from the feasible windows computed from your planning profile and calendar availability.";
 
-            const content = `I recommend ${timeSpan}.\n\n${rationale}\n\nConfidence: ${confidencePct}%.${altText}`;
+            const content = `I recommend ${timeSpan}.\n\n${rationale}${altText}`;
 
             return res.json({
               content,
               explainability: {
                 why: rationale,
-                benefits: [
-                  "Fits your preferred focus period",
-                  "Avoids calendar conflicts",
-                  "Gives the task uninterrupted focus",
-                ],
+                benefits: ["The window passed the existing availability and hard-constraint checks."],
                 risks: evalItem.tradeoffs || [
                   "Plans can adjust when new commitments appear",
                 ],
                 nextSteps: ["Confirm schedule recommendation if desired"],
-              },
-              confidenceScore: {
-                overall: confidencePct,
-                reasoningQuality: confidencePct,
-                dataQuality: 90,
-                riskLevel: "low" as const,
               },
               actionProposal: orchestration.proposedActions?.[0] || null,
             });
@@ -810,7 +848,7 @@ async function startServer() {
             const reason =
               unassigned?.reason ||
               "No suitable window found within your working hours and availability constraints.";
-            const content = `No suitable window found.\n\n${reason}\n\nConfidence: 80%.`;
+            const content = `No suitable window found.\n\n${reason}`;
 
             return res.json({
               content,
@@ -820,52 +858,40 @@ async function startServer() {
                 risks: ["Task may need deadline adjustment or smaller duration"],
                 nextSteps: ["Shorten task estimated duration or expand availability"],
               },
-              confidenceScore: {
-                overall: 80,
-                reasoningQuality: 85,
-                dataQuality: 85,
-                riskLevel: "medium" as const,
-              },
               actionProposal: null,
             });
           }
         }
+        return res.status(503).json({ error: "Scheduling could not be completed from current context." });
       }
 
-      let responseContent = "";
-      let hasGemini = false;
-      if (process.env.GEMINI_API_KEY) {
-        try {
-          const systemContext = `You are Sentinel Nova, an AI Chief of Staff. Think before acting, prioritize clearly, explain uncertainty, and keep recommendations concise.\n\nActive Tasks: ${JSON.stringify(tasks || [])}\nTarget Goals: ${JSON.stringify(goals || [])}\n\nUser message: "${message}"`;
-          const response = await geminiModelRouter.generateContent({
-            contents: systemContext,
-          });
-          if (response?.ok && response?.text) {
-            responseContent = response.text;
-            hasGemini = true;
-          }
-        } catch (geminiError) {
-          console.error("Gemini invocation failed:", geminiError);
-        }
-      }
+      const user = (req as express.Request & { user: AuthUser }).user;
+      const orchestration = await novaOrchestrator.orchestrate({
+        requestId: `req_${crypto.randomUUID()}`,
+        userRequest: message,
+        scope: {
+          includeCalendar: false,
+          includeAvailability: true,
+          activeTasksOnly: true,
+          includeMemory: true,
+        },
+      }, { userId: user.id });
 
-      if (!hasGemini) {
-        const lowercaseMsg = String(message || "").toLowerCase();
-        if (lowercaseMsg.includes("prioritize") || lowercaseMsg.includes("schedule") || lowercaseMsg.includes("task")) {
-          responseContent = `I reviewed your active workload.\n\n### Nova recommendation\nStart with the highest-impact task that protects a current goal or deadline. Defer low-priority work until the critical path is secure.\n\n### Next move\nReserve a focused block, complete the first meaningful milestone, then reassess the remaining workload.`;
-        } else {
-          responseContent = `I have your current goals and task context. Tell me what outcome you want to reach, and I will help turn it into a realistic plan with priorities, time constraints and recovery options.`;
-        }
+      if (!orchestration.success) {
+        return res.status(422).json({
+          error: "I could not route that request to a supported planning action. Try asking me to prioritize work, make a plan, or find a time for a task.",
+          degradedMode: true,
+        });
       }
 
       res.json({
-        content: responseContent,
-        explainability: { why: "Recommendation generated from your current planning context.", benefits: ["Clearer prioritization", "Earlier visibility into schedule risk"], risks: ["Plans can change when new commitments appear"], nextSteps: ["Review the recommended next action"] },
-        confidenceScore: { overall: 90, reasoningQuality: 89, dataQuality: 86, riskLevel: "low" as const }
+        content: orchestration.summary,
+        explainability: { why: orchestration.summary, benefits: [], risks: [], nextSteps: [] },
+        actionProposal: orchestration.proposedActions[0] || null,
       });
-    } catch (error) {
-      console.error("API Chat handler crashed:", error);
-      res.status(500).json({ error: "Nova could not complete the request." });
+    } catch {
+      console.error("API chat orchestration failed.");
+      res.status(503).json({ error: "Nova could not complete the request from current authorized context." });
     }
   });
 
@@ -2040,7 +2066,9 @@ async function startServer() {
     }
   });
 
-  if (process.env.NODE_ENV !== "production") {
+  if (apiOnly) {
+    // The separate Vite dev server proxies /api requests to this API process.
+  } else if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({ server: { middlewareMode: true }, appType: "spa" });
     app.use(vite.middlewares);
   } else {

@@ -8,6 +8,7 @@
 
 import fs from 'fs/promises';
 import path from 'path';
+import { DATA_DIR } from './dataDirectory';
 import crypto from 'crypto';
 import {
   ServerMemory,
@@ -30,7 +31,6 @@ import {
   normalizeForComparison,
 } from './memorySafety';
 
-const DATA_DIR = path.join(process.cwd(), 'data');
 const MEMORIES_FILE = path.join(DATA_DIR, 'memories.json');
 
 // In-memory cache keyed by userId

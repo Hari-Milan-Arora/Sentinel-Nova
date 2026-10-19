@@ -548,7 +548,7 @@ async function runMemoryAuditTestSuite() {
     assert(Array.isArray(res.relevantIndices));
   });
 
-  await test('38. GEMINI: timeout fallback within bounds (<=3000ms)', async () => {
+  await test('38. GEMINI: timeout fallback within bounds (<=6500ms)', async () => {
     const start = Date.now();
     await reasoningService.reasonAboutMemory('Check timeout bounds', 'retrieve', [], []);
     const elapsed = Date.now() - start;

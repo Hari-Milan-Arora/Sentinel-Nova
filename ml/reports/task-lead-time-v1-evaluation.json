@@ -1,0 +1,41 @@
+{
+  "artifact_sha256": "07f40a75f553aa76f4907a546e92674811c0ff691f9a5ab9d45e59ecc21f401c",
+  "beats_baseline_on_test_mae": true,
+  "dataset_filename": "Jira task dataset.xlsx",
+  "dataset_sha256": "7dba698472a37055a25899613b3aad88c2906a987bf7a0fd82295140b20e0867",
+  "limitations": [
+    "The workbook contains only resolved rows with Status=Done; metrics are conditional on this selected completed-task sample.",
+    "The dataset is Jira software-task data; estimates may not generalize to personal or non-software tasks.",
+    "Summary is the only model feature. The workbook has no revision history, so title edits after creation cannot be ruled out.",
+    "Created and Resolved Excel timestamps are timezone-naive; lead time is computed as their naive timestamp difference.",
+    "Predicted lead time is elapsed calendar time, not active effort or focused work duration.",
+    "The dataset has no stable task identifier and one repeated Summary group; those rows are excluded to prevent title leakage.",
+    "The model is evaluated on one chronological held-out slice and is not calibrated or production-validated."
+  ],
+  "model_version": "task-lead-time-v1",
+  "sample_counts": {
+    "final_fit_train_plus_validation": 1008,
+    "test": 179,
+    "train": 830,
+    "validation": 178
+  },
+  "split_method": "chronological_sorted_by_Created",
+  "target_name": "task_completion_lead_time",
+  "target_units": "elapsed_calendar_days",
+  "test_metrics": {
+    "baseline_training_median": {
+      "mae_days": 620.9803072625699,
+      "median_absolute_error_days": 621.1680555555556,
+      "r2": -2413.1707921091293,
+      "rmse_days": 621.1089587426507,
+      "sample_count": 179
+    },
+    "trained_model": {
+      "mae_days": 281.7987267275159,
+      "median_absolute_error_days": 282.52269108285543,
+      "r2": -497.71192033741835,
+      "rmse_days": 282.29856615377247,
+      "sample_count": 179
+    }
+  }
+}

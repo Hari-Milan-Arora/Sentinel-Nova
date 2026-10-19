@@ -35,4 +35,13 @@ lerna-debug.log*
 
 # Storage & temp data
 data/*.json
+data/task_ml_outcomes.json
+data/planning_profiles.json
 !data/.gitkeep
+
+# Public source datasets and generated ML artifacts are kept out of Git.
+ml/data/raw/
+ml/models/
+Jira task dataset.xlsx
+__pycache__/
+*.py[cod]

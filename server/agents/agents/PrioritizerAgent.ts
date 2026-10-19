@@ -24,6 +24,7 @@ import { BaseAgent } from '../Agent';
 import { AgentContext, AgentCapability, AgentResult, AgentAction } from '../types';
 import { prioritizationEngine } from './PrioritizationEngine';
 import { prioritizationReasoningService } from '../services/PrioritizationReasoningService';
+import { taskLeadTimePredictionService } from '../services/TaskLeadTimePredictionService';
 import { PrioritizerOutput } from './prioritizerTypes';
 
 export class PrioritizerAgent extends BaseAgent {
@@ -97,10 +98,17 @@ export class PrioritizerAgent extends BaseAgent {
     const deterministicOutput = prioritizationEngine.generatePrioritization(context);
 
     // 2. Optionally enhance with Gemini reasoning (guaranteed fallback on failure or timeout)
-    const { output: finalOutput } = await prioritizationReasoningService.enhancePrioritization(
-      deterministicOutput,
-      context.userRequest
-    );
+    const [reasoningResult, leadTimeResult] = await Promise.all([
+      prioritizationReasoningService.enhancePrioritization(deterministicOutput, context.userRequest),
+      taskLeadTimePredictionService.predictForTasks(context.tasks || []),
+    ]);
+    const finalOutput: PrioritizerOutput = {
+      ...reasoningResult.output,
+      metadata: {
+        ...(reasoningResult.output.metadata || {}),
+        taskLeadTimePrediction: leadTimeResult,
+      },
+    };
 
     // 3. Generate safe Action Proposals (PROPOSALS ONLY - zero autonomous execution)
     const proposedActions: AgentAction[] = [];
@@ -154,6 +162,7 @@ export class PrioritizerAgent extends BaseAgent {
         recommendedStrategy: finalOutput.recommendedStrategy.id,
         itemCount: finalOutput.prioritizedItems.length,
         strategyCount: finalOutput.strategyCandidates.length,
+        taskLeadTimePrediction: leadTimeResult,
       },
     };
   }

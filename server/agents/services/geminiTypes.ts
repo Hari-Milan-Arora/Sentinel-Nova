@@ -2,7 +2,23 @@
  * Types for Gemini Circular LLM Callback Router
  */
 
+import type { GoogleGenAI } from '@google/genai';
+
 export type ModelAvailabilityStatus = 'available' | 'cooldown' | 'rate_limited' | 'unavailable';
+export type GeminiFailureCategory =
+  | 'missing_configuration'
+  | 'authentication'
+  | 'invalid_request'
+  | 'unsupported_model'
+  | 'rate_limit'
+  | 'quota_exhausted'
+  | 'provider_transient'
+  | 'timeout'
+  | 'malformed_response'
+  | 'safety_refusal'
+  | 'oversized_context'
+  | 'all_models_unavailable'
+  | 'unknown';
 
 export interface ModelCandidate {
   name: string;
@@ -17,6 +33,7 @@ export interface RouterCallConfig {
   responseMimeType?: string;
   maxOutputTokens?: number;
   timeoutMs?: number;
+  responseJsonSchema?: unknown;
 }
 
 export interface RouterCallRequest {
@@ -33,6 +50,9 @@ export interface RouterCallResult {
   exhausted?: boolean;
   reason?: string;
   error?: string;
+  failureCategory?: GeminiFailureCategory;
+  retryCount?: number;
+  latencyMs?: number;
 }
 
 export interface RateLimiterReservation {
@@ -46,4 +66,5 @@ export interface RouterOptions {
   maxModelAttempts?: number;
   routerTimeoutMs?: number;
   apiKey?: string;
+  client?: GoogleGenAI;
 }

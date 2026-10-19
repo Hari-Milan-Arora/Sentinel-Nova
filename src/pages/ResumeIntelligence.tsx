@@ -26,24 +26,14 @@ import { ResumeMetrics } from '../types';
 
 interface ResumeIntelligenceProps {
   resume: ResumeMetrics;
-  onOptimize: () => void;
   isDark: boolean;
 }
 
 export default function ResumeIntelligence({
   resume,
-  onOptimize,
   isDark
 }: ResumeIntelligenceProps) {
-  const [isScanned, setIsScanned] = React.useState(false);
   const [activeTab, setActiveTab] = React.useState<'ats' | 'gaps' | 'courses'>('ats');
-
-  const handleScan = async () => {
-    setIsScanned(true);
-    await new Promise(resolve => setTimeout(resolve, 800));
-    onOptimize();
-    setIsScanned(false);
-  };
 
   const courseRecommendations = [
     { title: "Vertex AI: Custom Training & Tuning Pipelines", provider: "Coursera", duration: "12 hours", relevance: "high", skill: "Vertex AI Study Jobs" },
@@ -53,23 +43,26 @@ export default function ResumeIntelligence({
 
   return (
     <div className="space-y-6">
+      <div role="note" className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs leading-5 text-amber-200">
+        Prototype only: the displayed ATS, hiring, and course values are illustrative heuristics. No resume has been uploaded, and no ATS or hiring model is connected.
+      </div>
       
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-gray-800/20 pb-4">
         <div className="space-y-1">
           <h2 className="text-lg font-bold font-space tracking-tight">Resume ATS Evolution Platform</h2>
           <p className="text-xs text-gray-400">
-            Scanning portfolio structures and parsing skill representations to forecast hiring probabilities and automate ATS score optimization.
+            Prototype estimates from the current local skill list. Resume upload, ATS parsing, and hiring-outcome modeling are not connected.
           </p>
         </div>
 
         <button
-          onClick={handleScan}
-          disabled={isScanned}
-          className="px-3.5 py-1.5 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white rounded-xl text-[10px] font-bold font-mono uppercase tracking-wider flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+          disabled
+          title="Resume upload and analysis are not configured"
+          className="px-3.5 py-1.5 bg-gradient-to-r from-violet-600 to-indigo-600 text-white rounded-xl text-[10px] font-bold font-mono uppercase tracking-wider flex items-center gap-1.5 opacity-50 cursor-not-allowed"
         >
-          <RefreshCw size={12} className={isScanned ? 'animate-spin' : ''} />
-          {isScanned ? 'Evaluating Resume...' : 'Analyze & Optimize CV'}
+          <RefreshCw size={12} />
+          Resume analysis unavailable
         </button>
       </div>
 
@@ -242,12 +235,13 @@ export default function ResumeIntelligence({
           </div>
 
           <div className="p-5 border-t border-gray-800/15 flex items-center justify-between text-[11px]">
-            <span className="text-gray-400">Ready to inject these optimized keywords?</span>
+            <span className="text-gray-400">Keyword changes are a preview; no resume file is connected.</span>
             <button
-              onClick={handleScan}
-              className="text-violet-400 hover:text-violet-300 font-semibold flex items-center gap-0.5 cursor-pointer"
+              disabled
+              title="Resume editing is not configured"
+              className="text-violet-400 font-semibold flex items-center gap-0.5 opacity-50 cursor-not-allowed"
             >
-              Automate Keyword Integration <ChevronRight size={14} />
+              Editing unavailable <ChevronRight size={14} />
             </button>
           </div>
 
