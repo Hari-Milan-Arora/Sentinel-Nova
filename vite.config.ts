@@ -11,6 +11,21 @@ export default defineConfig(({ mode }) => {
         env.VITE_GOOGLE_CLIENT_ID || env.GOOGLE_CLIENT_ID || ''
       ),
     },
+    resolve: {
+      dedupe: ['react', 'react-dom', 'react-router-dom'],
+    },
+    optimizeDeps: {
+      include: [
+        'react',
+        'react-dom',
+        'react-dom/client',
+        'react/jsx-runtime',
+        'react/jsx-dev-runtime',
+        'react-router-dom',
+        'lucide-react',
+        'recharts',
+      ],
+    },
     server: {
       port: 3000,
       host: '127.0.0.1',
