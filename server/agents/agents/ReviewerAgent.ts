@@ -423,6 +423,24 @@ export class ReviewerAgent extends BaseAgent {
           warnings: [],
         };
       }
+      if (action.type === 'COMPLETE_TASK' && task.dependencyIds && task.dependencyIds.length > 0) {
+        for (const depId of task.dependencyIds) {
+          const dep = (context.tasks || []).find((t) => t.id === depId) || (await getTaskById(userId, depId));
+          if (dep && dep.status !== 'completed') {
+            return {
+              approved: false,
+              actionId,
+              riskLevel: 'high',
+              requiresConfirmation: true,
+              reasons: [
+                `Blocked task: Prerequisite task "${dep.title}" (${dep.id}) must be completed before "${task.title}".`,
+              ],
+              warnings: [],
+            };
+          }
+        }
+      }
+
       if (action.type === 'COMPLETE_TASK' && task.status === 'completed') {
         warnings.push(`Task "${task.title}" is already marked as completed.`);
       }
@@ -646,6 +664,29 @@ export class ReviewerAgent extends BaseAgent {
         ],
         warnings: [],
       };
+    }
+
+    // 13b. Dependency Readiness Check
+    if (task.dependencyIds && task.dependencyIds.length > 0) {
+      for (const depId of task.dependencyIds) {
+        const dep =
+          (activeTasks as (ServerTask | Task)[]).find((t) => t.id === depId) ||
+          (await getTaskById(userId, depId));
+        if (dep && dep.status !== 'completed') {
+          if (!dep.scheduledEnd || new Date(dep.scheduledEnd).getTime() > reqStartMs) {
+            return {
+              approved: false,
+              actionId,
+              riskLevel: 'high',
+              requiresConfirmation: true,
+              reasons: [
+                `Dependency violation: Task "${task.title}" depends on "${dep.title}" (${dep.id}) which is not completed and not scheduled to finish before this window.`,
+              ],
+              warnings: [],
+            };
+          }
+        }
+      }
     }
 
     // 14. Due Date Warning Check (Non-blocking)

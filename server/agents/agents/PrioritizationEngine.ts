@@ -321,6 +321,32 @@ export class PrioritizationEngine {
   }
 
   /**
+   * Day 6: Exposes public factor evaluation for intelligence quality validation and audits.
+   */
+  public scoreTask(
+    task: Task,
+    allTasks: Task[] = [],
+    goalMap: Map<string, Goal> = new Map(),
+    projectMap: Map<string, Project> = new Map(),
+    now: Date = new Date()
+  ): ScoredTaskFactors {
+    const downstreamDependentsMap = new Map<string, string[]>();
+    for (const t of allTasks) {
+      const deps = [
+        ...(Array.isArray(t.dependencyIds) ? t.dependencyIds : []),
+        ...(Array.isArray(t.dependencies) ? t.dependencies : []),
+      ];
+      for (const depId of deps) {
+        if (!downstreamDependentsMap.has(depId)) {
+          downstreamDependentsMap.set(depId, []);
+        }
+        downstreamDependentsMap.get(depId)!.push(t.id);
+      }
+    }
+    return this.evaluateTaskFactors(task, now, goalMap, projectMap, downstreamDependentsMap, allTasks);
+  }
+
+  /**
    * Evaluates normalized factors for a single task:
    * Urgency, Importance, Goal Impact, Project Impact, Blocking Impact, Effort.
    */
@@ -338,7 +364,11 @@ export class PrioritizationEngine {
     let isDueToday = false;
 
     if (task.dueDate) {
-      const dueTime = new Date(task.dueDate).getTime();
+      const dueStr =
+        task.dueTime && !task.dueDate.includes('T')
+          ? `${task.dueDate}T${task.dueTime.length === 5 ? `${task.dueTime}:00` : task.dueTime}.000Z`
+          : task.dueDate;
+      const dueTime = new Date(dueStr).getTime();
       const diffHours = (dueTime - now.getTime()) / (1000 * 60 * 60);
 
       if (diffHours < 0) {

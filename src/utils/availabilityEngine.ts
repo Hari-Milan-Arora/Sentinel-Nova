@@ -230,9 +230,18 @@ export function calculateAvailability(params: {
   // 2. Fixed Recurring Commitments (Hard constraint)
   if (profile?.recurringBlocks && Array.isArray(profile.recurringBlocks)) {
     for (const block of profile.recurringBlocks) {
-      const days = Array.isArray(block.days) ? block.days : [];
-      const matchesDay = days.some(
-        (d: string) => d === fullDayOfWeek || d === shortDayOfWeek || d.startsWith(shortDayOfWeek)
+      const rawDays = Array.isArray(block.days)
+        ? block.days
+        : (block as any).dayOfWeek
+        ? [(block as any).dayOfWeek]
+        : (block as any).day
+        ? [(block as any).day]
+        : [];
+      const matchesDay = rawDays.some(
+        (d: string) =>
+          d.toLowerCase() === fullDayOfWeek.toLowerCase() ||
+          d.toLowerCase() === shortDayOfWeek.toLowerCase() ||
+          d.toLowerCase().startsWith(shortDayOfWeek.toLowerCase())
       );
       if (matchesDay) {
         const startMin = timeStringToMinutes(block.startTime);

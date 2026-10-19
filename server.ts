@@ -6,6 +6,7 @@ import { GoogleGenAI } from "@google/genai";
 import { getPlanningProfile, savePlanningProfile, validatePlanningProfile } from "./server/profileStore";
 import {
   getTasksByUser,
+  getActiveTasksByUser,
   getTaskById,
   createTask,
   updateTask,
@@ -65,6 +66,9 @@ import {
   recoveryAgent,
   chiefOfStaffWorkflow,
 } from "./server/agents";
+import { decisionStore } from "./server/agents/research/decisionStore";
+import { replayDecision } from "./server/agents/research/decisionReplay";
+import { runBaselineComparison } from "./server/agents/research/baselineFramework";
 import {
   getMemoriesByUser,
   getMemoryById,
@@ -1904,6 +1908,135 @@ async function startServer() {
     } catch (err: any) {
       console.error("GET /api/nova/workflow/:workflowId error:", err);
       res.status(500).json({ error: "Failed to retrieve workflow." });
+    }
+  });
+
+  // --- Day 7 Research & Observability Endpoints ---
+  // 6. GET /api/nova/metrics - Research Metrics Dashboard
+  app.get("/api/nova/metrics", requireAuth, async (req, res) => {
+    try {
+      const user = (req as express.Request & { user: AuthUser }).user;
+      const { startDate, endDate, decisionType, agentId, outcome } = req.query;
+
+      const metrics = decisionStore.calculateMetrics(user.id, {
+        startDate: startDate as string,
+        endDate: endDate as string,
+        decisionType: decisionType as any,
+        agentId: agentId as string,
+        outcome: outcome as any,
+      });
+
+      res.json({ success: true, metrics });
+    } catch (err: any) {
+      console.error("GET /api/nova/metrics error:", err);
+      res.status(500).json({ error: "Failed to retrieve metrics." });
+    }
+  });
+
+  // 7. GET /api/nova/decisions - Structured Decision Telemetry Records
+  app.get("/api/nova/decisions", requireAuth, async (req, res) => {
+    try {
+      const user = (req as express.Request & { user: AuthUser }).user;
+      const { startDate, endDate, decisionType, agentId, outcome, limit, offset } = req.query;
+
+      const decisions = decisionStore.listDecisions(user.id, {
+        startDate: startDate as string,
+        endDate: endDate as string,
+        decisionType: decisionType as any,
+        agentId: agentId as string,
+        outcome: outcome as any,
+        limit: limit ? parseInt(limit as string, 10) : 50,
+        offset: offset ? parseInt(offset as string, 10) : 0,
+      });
+
+      res.json({ success: true, decisions });
+    } catch (err: any) {
+      console.error("GET /api/nova/decisions error:", err);
+      res.status(500).json({ error: "Failed to retrieve decisions." });
+    }
+  });
+
+  // 8. GET /api/nova/export - Research Safe Data Export (JSON or CSV)
+  app.get("/api/nova/export", requireAuth, async (req, res) => {
+    try {
+      const user = (req as express.Request & { user: AuthUser }).user;
+      const format = req.query.format === "csv" ? "csv" : "json";
+      const exported = decisionStore.exportDecisions(user.id, format);
+
+      if (format === "csv") {
+        res.setHeader("Content-Type", "text/csv");
+        res.setHeader("Content-Disposition", 'attachment; filename="sentinel_nova_research_telemetry.csv"');
+        return res.send(exported);
+      }
+
+      res.setHeader("Content-Type", "application/json");
+      res.send(exported);
+    } catch (err: any) {
+      console.error("GET /api/nova/export error:", err);
+      res.status(500).json({ error: "Failed to export decisions." });
+    }
+  });
+
+  // 9. POST /api/nova/replay - Deterministic In-Memory Decision Replay
+  app.post("/api/nova/replay", requireAuth, async (req, res) => {
+    try {
+      const user = (req as express.Request & { user: AuthUser }).user;
+      const { decisionId } = req.body || {};
+      if (!decisionId) {
+        return res.status(400).json({ error: "decisionId is required." });
+      }
+
+      const record = decisionStore.getDecisionById(user.id, decisionId);
+      if (!record) {
+        return res.status(404).json({ error: "Decision record not found or access denied." });
+      }
+
+      const replayResult = replayDecision({ record });
+      res.json({ success: true, replayResult });
+    } catch (err: any) {
+      console.error("POST /api/nova/replay error:", err);
+      res.status(500).json({ error: "Decision replay failed." });
+    }
+  });
+
+  // 10. POST /api/nova/baselines/compare - Run Baseline Comparison Framework
+  app.post("/api/nova/baselines/compare", requireAuth, async (req, res) => {
+    try {
+      const user = (req as express.Request & { user: AuthUser }).user;
+      const tasks = await getActiveTasksByUser(user.id);
+      const rawProfile = await getPlanningProfile(user.id);
+      const profile = rawProfile || {
+        userId: user.id,
+        onboardingCompleted: true,
+        timezone: "UTC",
+        preferredWorkingHours: {
+          startTime: "09:00",
+          endTime: "17:00",
+          preferredPeriods: ["Morning", "Afternoon"] as any,
+        },
+        sleepSchedule: {
+          weekdaySleep: "23:00",
+          weekdayWake: "07:00",
+          weekendDifferent: false,
+        },
+        recurringBlocks: [],
+        focusWindowBufferMinutes: 15,
+      };
+      const targetDate = (req.body?.targetDate as string) || new Date().toISOString().split("T")[0];
+      const calendarEvents = getCachedEvents(user.id);
+
+      const comparison = runBaselineComparison({
+        userId: user.id,
+        tasks: tasks as any,
+        profile: profile as any,
+        targetDate,
+        calendarEvents,
+      });
+
+      res.json({ success: true, comparison });
+    } catch (err: any) {
+      console.error("POST /api/nova/baselines/compare error:", err);
+      res.status(500).json({ error: "Baseline comparison failed." });
     }
   });
 

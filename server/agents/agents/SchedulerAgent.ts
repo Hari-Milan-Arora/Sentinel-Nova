@@ -156,6 +156,22 @@ export class SchedulerAgent extends BaseAgent {
 
     // 4. Evaluate each task
     for (const task of targetTasks) {
+      // Check dependency readiness: blocked tasks must not be scheduled ahead of incomplete prerequisites
+      if (task.dependencyIds && task.dependencyIds.length > 0) {
+        const availableTasks = context.tasks || [];
+        const incompleteDep = availableTasks.find(
+          (t) => task.dependencyIds?.includes(t.id) && t.status !== 'completed' && !t.scheduledEnd
+        );
+        if (incompleteDep) {
+          unassignedTasks.push({
+            taskId: task.id,
+            title: task.title,
+            reason: `Prerequisite task "${incompleteDep.title}" (${incompleteDep.id}) is not yet completed.`,
+          });
+          continue;
+        }
+      }
+
       const candidateWindows = this.resolveCandidateWindows(task, context);
 
       if (candidateWindows.length === 0) {

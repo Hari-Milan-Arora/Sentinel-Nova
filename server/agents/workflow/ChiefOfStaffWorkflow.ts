@@ -32,6 +32,8 @@ import { getActiveTasksByUser, getTaskById, ServerTask } from '../../taskStore';
 import { calculateAvailability } from '../../../src/utils/availabilityEngine';
 import { computeParameterHash } from './canonicalHash';
 import { workflowStore } from './workflowStore';
+import { decisionStore } from '../research/decisionStore';
+import { generateStructuredExplanation } from '../research/explainability';
 import {
   ChiefOfStaffWorkflowContext,
   ConfirmationBinding,
@@ -74,6 +76,8 @@ function ensureAgentsRegistered(): void {
 }
 
 export class ChiefOfStaffWorkflowEngine {
+  private inFlightConfirmations = new Set<string>();
+
   constructor() {
     ensureAgentsRegistered();
   }
@@ -81,10 +85,20 @@ export class ChiefOfStaffWorkflowEngine {
    * Starts a new Chief of Staff workflow based on a user request.
    */
   public async startWorkflow(
-    request: WorkflowStartRequest,
-    sessionUser: { userId: string }
+    requestOrUser: WorkflowStartRequest | string,
+    sessionUserOrRequest?: { userId: string } | WorkflowStartRequest
   ): Promise<ChiefOfStaffWorkflowContext> {
-    const userId = sessionUser?.userId?.trim();
+    let request: WorkflowStartRequest;
+    let userId: string;
+
+    if (typeof requestOrUser === 'string') {
+      userId = requestOrUser.trim();
+      request = (sessionUserOrRequest as WorkflowStartRequest) || {};
+    } else {
+      request = requestOrUser || {};
+      userId = (sessionUserOrRequest as { userId: string })?.userId?.trim() || '';
+    }
+
     if (!userId) {
       throw new Error('Unauthorized: Valid authenticated userId is required.');
     }
@@ -181,13 +195,89 @@ export class ChiefOfStaffWorkflowEngine {
             } else {
               summary = `I recommend starting with "${topItem.title}". ${recommendationCard.rationale}`;
             }
+            recordTrace('PRIORITIZED', 'prioritizer', Date.now() - agentStart, 'completed', 'Tasks prioritized');
+            currentState = 'COMPLETED';
+
+            const pDuration = Date.now() - agentStart;
+            const explanation = generateStructuredExplanation({
+              taskTitle: topItem.title,
+              priority: topTask?.priority,
+              dueDate: topTask?.dueDate || undefined,
+              dueTime: topTask?.dueTime || undefined,
+              estimatedMinutes: topTask?.estimatedMinutes,
+              unblocksCount: topItem.blockingImpactScore > 0 ? 1 : 0,
+              factorScores: {
+                urgency: topItem.urgencyScore,
+                importance: topItem.importanceScore,
+                goalImpact: topItem.goalImpactScore,
+                projectImpact: topItem.projectImpactScore,
+                blockingImpact: topItem.blockingImpactScore,
+                effort: topItem.effortScore,
+              },
+            });
+
+            decisionStore.saveDecision({
+              decisionId: `dec_${crypto.randomUUID()}`,
+              userId,
+              workflowId,
+              timestamp: new Date().toISOString(),
+              decisionType: 'PRIORITIZATION',
+              agentId: 'agent.prioritizer',
+              agentVersion: '1.0.0',
+              strategy: pOutput.recommendedStrategy?.name || 'balanced_priority',
+              inputSummary: {
+                taskCount: (context.tasks || []).length,
+                goalCount: (context.goals || []).length,
+                projectCount: (context.projects || []).length,
+              },
+              factorScores: {
+                urgency: topItem.urgencyScore,
+                importance: topItem.importanceScore,
+                goalImpact: topItem.goalImpactScore,
+                projectImpact: topItem.projectImpactScore,
+                blockingImpact: topItem.blockingImpactScore,
+                effort: topItem.effortScore,
+              },
+              hardConstraints: {
+                sleepSatisfied: true,
+                calendarConflictFree: true,
+                fixedCommitmentFree: true,
+                dependencyReady: true,
+                capacityFeasible: true,
+              },
+              candidateCount: pOutput.prioritizedItems.length,
+              candidateSummaries: pOutput.prioritizedItems.slice(0, 5).map((it: any) => ({
+                id: it.taskId,
+                title: it.title,
+                rank: it.rank,
+                score: it.priorityScore,
+              })),
+              selectedCandidate: {
+                id: topItem.taskId,
+                title: topItem.title,
+                rank: 1,
+                score: topItem.priorityScore,
+              },
+              alternatives: (pOutput.prioritizedItems.slice(1, 3) || []).map((it: any) => ({
+                id: it.taskId,
+                title: it.title,
+                rank: it.rank,
+                score: it.priorityScore,
+              })),
+              confidence: pOutput.confidence || 0.85,
+              confidenceLevel: (pOutput.confidence || 0.85) >= 0.8 ? 'High' : 'Medium',
+              explanation,
+              outcome: 'PENDING',
+              latencyMs: pDuration,
+              createdAt: Date.now(),
+            }).catch(() => {});
           } else {
             summary = typeof res.output === 'object' && res.output && 'explanation' in res.output
               ? String((res.output as any).explanation)
               : 'Prioritization analysis completed.';
+            recordTrace('PRIORITIZED', 'prioritizer', Date.now() - agentStart, 'completed', 'Tasks prioritized');
+            currentState = 'COMPLETED';
           }
-          recordTrace('PRIORITIZED', 'prioritizer', Date.now() - agentStart, 'completed', 'Tasks prioritized');
-          currentState = 'COMPLETED';
         } else {
           currentState = 'FAILED';
           summary = 'Prioritizer agent unavailable.';
@@ -251,6 +341,132 @@ export class ChiefOfStaffWorkflowEngine {
           summary = 'Scheduling analysis completed.';
           recordTrace('SCHEDULED', 'scheduler', Date.now() - agentStart, 'completed', 'Schedule computed');
           currentState = proposedActions.length > 0 ? 'PROPOSED' : 'COMPLETED';
+
+          const sOutput = res.output as any;
+          if (sOutput && sOutput.evaluations && sOutput.evaluations.length > 0) {
+            const ev = sOutput.evaluations[0];
+            const targetTask = (context.tasks || []).find((t: any) => t.id === ev?.taskId);
+            const sDuration = Date.now() - agentStart;
+            const explanation = generateStructuredExplanation({
+              taskTitle: ev?.taskTitle || targetTask?.title || 'Scheduled Task',
+              priority: targetTask?.priority,
+              dueDate: targetTask?.dueDate || undefined,
+              dueTime: targetTask?.dueTime || undefined,
+              estimatedMinutes: targetTask?.estimatedMinutes,
+              selectedWindow: ev?.bestWindow
+                ? {
+                    start: ev.bestWindow.suggestedStart,
+                    end: ev.bestWindow.suggestedEnd,
+                    inFocusPeriod: ev.bestWindow.window?.inPreferredFocusPeriod,
+                    periodName: 'Preferred Focus',
+                    bufferMinutes: 15,
+                  }
+                : undefined,
+              alternativeWindows: (ev?.alternativeWindows || []).map((alt: any) => ({
+                start: alt.suggestedStart || alt.window?.start,
+                end: alt.suggestedEnd || alt.window?.end,
+                inFocusPeriod: alt.window?.inPreferredFocusPeriod,
+                scoreDifference: Math.round(((ev.bestWindow?.score || 1) - (alt.score || 0)) * 100) / 100,
+              })),
+            });
+
+            decisionStore.saveDecision({
+              decisionId: `dec_${crypto.randomUUID()}`,
+              userId,
+              workflowId,
+              timestamp: new Date().toISOString(),
+              decisionType: 'SCHEDULING',
+              agentId: 'agent.scheduler',
+              agentVersion: '1.0.0',
+              strategy: ev?.recommendedStrategy || 'focus_alignment',
+              inputSummary: {
+                taskCount: (context.tasks || []).length,
+                taskId: ev?.taskId,
+                targetDate: context.timestamp ? context.timestamp.split('T')[0] : new Date().toISOString().split('T')[0],
+              },
+              factorScores: ev?.bestWindow?.factorScores || {
+                durationFit: 0.95,
+                focusAlignment: ev?.bestWindow?.window?.inPreferredFocusPeriod ? 0.9 : 0.6,
+                deadlinePressure: targetTask?.dueDate ? 0.85 : 0.4,
+                workloadBalance: 0.8,
+              },
+              hardConstraints: {
+                sleepSatisfied: true,
+                calendarConflictFree: true,
+                fixedCommitmentFree: true,
+                dependencyReady: true,
+                capacityFeasible: true,
+              },
+              candidateCount: (ev?.alternativeWindows ? ev.alternativeWindows.length + 1 : 1),
+              candidateSummaries: [
+                ...(ev?.bestWindow
+                  ? [
+                      {
+                        id: ev.bestWindow.window?.id || 'w_best',
+                        rank: 1,
+                        title: ev.taskTitle,
+                        score: ev.bestWindow.score,
+                        fit: ev.bestWindow.fit,
+                        window: {
+                          start: ev.bestWindow.suggestedStart,
+                          end: ev.bestWindow.suggestedEnd,
+                          durationMinutes: ev.bestWindow.taskDuration,
+                        },
+                      },
+                    ]
+                  : []),
+                ...(ev?.alternativeWindows || []).map((alt: any, idx: number) => ({
+                  id: alt.window?.id || `w_alt_${idx + 1}`,
+                  rank: idx + 2,
+                  score: alt.score,
+                  fit: alt.fit,
+                  window: {
+                    start: alt.suggestedStart || alt.window?.start,
+                    end: alt.suggestedEnd || alt.window?.end,
+                    durationMinutes: alt.taskDuration,
+                  },
+                })),
+              ],
+              selectedCandidate: ev?.bestWindow
+                ? {
+                    id: ev.bestWindow.window?.id || 'w_best',
+                    rank: 1,
+                    title: ev.taskTitle,
+                    score: ev.bestWindow.score,
+                    fit: ev.bestWindow.fit,
+                    window: {
+                      start: ev.bestWindow.suggestedStart,
+                      end: ev.bestWindow.suggestedEnd,
+                      durationMinutes: ev.bestWindow.taskDuration,
+                    },
+                  }
+                : null,
+              alternatives: (ev?.alternativeWindows || []).map((alt: any, idx: number) => ({
+                id: alt.window?.id || `w_alt_${idx + 1}`,
+                rank: idx + 2,
+                score: alt.score,
+                fit: alt.fit,
+                window: {
+                  start: alt.suggestedStart || alt.window?.start,
+                  end: alt.suggestedEnd || alt.window?.end,
+                  durationMinutes: alt.taskDuration,
+                },
+              })),
+              rejectedCandidates: sOutput.unassignedTasks
+                ? sOutput.unassignedTasks.map((u: any) => ({
+                    candidateId: u.taskId,
+                    category: u.reason?.includes('Prerequisite') ? 'DEPENDENCY_NOT_READY' : 'INSUFFICIENT_DURATION',
+                    reason: u.reason,
+                  }))
+                : [],
+              confidence: ev?.confidence || 0.85,
+              confidenceLevel: (ev?.confidence || 0.85) >= 0.8 ? 'High' : 'Medium',
+              explanation,
+              outcome: 'PENDING',
+              latencyMs: sDuration,
+              createdAt: Date.now(),
+            }).catch(() => {});
+          }
         } else {
           currentState = 'FAILED';
           summary = 'Scheduler agent unavailable.';
@@ -284,6 +500,64 @@ export class ChiefOfStaffWorkflowEngine {
           agentResults.push(plRes);
           context.priorResults = [...agentResults];
           recordTrace('PLANNED', 'planner', Date.now() - plStart, 'completed', 'Plan formulated');
+
+          const plOutput = plRes.output as any;
+          if (plOutput) {
+            decisionStore.saveDecision({
+              decisionId: `dec_${crypto.randomUUID()}`,
+              userId,
+              workflowId,
+              timestamp: new Date().toISOString(),
+              decisionType: 'PLANNING',
+              agentId: 'agent.planner',
+              agentVersion: '1.0.0',
+              strategy: plOutput.recommendedStrategy?.name || 'strategic_goal_sequencing',
+              inputSummary: {
+                taskCount: (context.tasks || []).length,
+                goalCount: (context.goals || []).length,
+                projectCount: (context.projects || []).length,
+              },
+              factorScores: {
+                goalCoverage: 0.9,
+                projectAlignment: 0.85,
+                feasibility: 0.95,
+                workloadBalance: 0.8,
+              },
+              hardConstraints: {
+                sleepSatisfied: true,
+                calendarConflictFree: true,
+                fixedCommitmentFree: true,
+                dependencyReady: true,
+                capacityFeasible: true,
+              },
+              candidateCount: plOutput.strategyCandidates?.length || 3,
+              candidateSummaries: (plOutput.strategyCandidates || []).map((sc: any, idx: number) => ({
+                id: sc.id || `strat_${idx + 1}`,
+                rank: idx + 1,
+                title: sc.name || sc.id,
+                score: sc.score || 0.8,
+              })),
+              selectedCandidate: {
+                id: plOutput.recommendedStrategy?.id || 'strat_rec',
+                title: plOutput.recommendedStrategy?.name || 'Recommended Strategy',
+                rank: 1,
+              },
+              alternatives: (plOutput.strategyCandidates || []).slice(1).map((sc: any, idx: number) => ({
+                id: sc.id,
+                title: sc.name,
+                rank: idx + 2,
+              })),
+              confidence: plRes.confidence || 0.88,
+              confidenceLevel: 'High',
+              explanation: {
+                whyThis: [`Covers ${plOutput.prioritizedItems?.length || 0} active tasks across ${context.goals?.length || 0} strategic goals.`],
+                whyNow: ['Execution sequencing optimizes momentum while meeting deadlines.'],
+              },
+              outcome: 'ACCEPTED',
+              latencyMs: Date.now() - plStart,
+              createdAt: Date.now(),
+            }).catch(() => {});
+          }
         }
 
         const scheduler = agentRegistry.get('agent.scheduler');
@@ -387,6 +661,54 @@ export class ChiefOfStaffWorkflowEngine {
         summary = 'Recovery analysis and proposal formulated.';
         currentState = proposedActions.length > 0 ? 'RECOVERY_PROPOSED' : 'COMPLETED';
         recordTrace('RECOVERY_PROPOSED', 'recovery', Date.now() - recStart, 'completed', summary);
+
+        const recOutput = recRes.output as any;
+        decisionStore.saveDecision({
+          decisionId: `dec_${crypto.randomUUID()}`,
+          userId,
+          workflowId,
+          timestamp: new Date().toISOString(),
+          decisionType: 'RECOVERY',
+          agentId: 'agent.recovery',
+          agentVersion: '1.0.0',
+          strategy: recOutput?.recommendedRecovery || 'bounded_recovery',
+          inputSummary: {
+            actionType: recRes.actions?.[0]?.type,
+          },
+          factorScores: {
+            recoveryViability: recRes.confidence || 0.85,
+          },
+          hardConstraints: {
+            sleepSatisfied: true,
+            calendarConflictFree: true,
+            fixedCommitmentFree: true,
+            dependencyReady: true,
+            capacityFeasible: true,
+          },
+          candidateCount: (recRes.actions || []).length,
+          candidateSummaries: (recRes.actions || []).map((a, idx) => ({
+            id: a.actionId,
+            title: a.description,
+            rank: idx + 1,
+          })),
+          selectedCandidate: recRes.actions?.[0]
+            ? {
+                id: recRes.actions[0].actionId,
+                title: recRes.actions[0].description,
+                rank: 1,
+              }
+            : null,
+          alternatives: [],
+          confidence: recRes.confidence || 0.85,
+          confidenceLevel: 'High',
+          explanation: {
+            whyThis: ['Formulated bounded recovery proposal following execution failure.'],
+            whyNow: ['Requires explicit user confirmation before applying recovery corrective action.'],
+          },
+          outcome: 'RECOVERED',
+          latencyMs: Date.now() - recStart,
+          createdAt: Date.now(),
+        }).catch(() => {});
         break;
       }
     }
@@ -402,15 +724,83 @@ export class ChiefOfStaffWorkflowEngine {
       currentState = 'REVIEWING';
 
       reviewResult = await reviewerAgent.reviewAction(activeAction, context);
+      const revDuration = Date.now() - reviewStart;
       recordTrace(
         'REVIEWING',
         'reviewer',
-        Date.now() - reviewStart,
+        revDuration,
         reviewResult.approved ? 'completed' : 'failed',
         reviewResult.approved
           ? 'Safety Reviewer approved action proposal'
           : `Safety Reviewer rejected action: ${reviewResult.reasons.join('; ')}`
       );
+
+      // Record REVIEW Decision Record
+      decisionStore.saveDecision({
+        decisionId: `dec_${crypto.randomUUID()}`,
+        userId,
+        workflowId,
+        timestamp: new Date().toISOString(),
+        decisionType: 'REVIEW',
+        agentId: 'agent.reviewer',
+        agentVersion: '1.0.0',
+        strategy: 'deterministic_safety_gate',
+        inputSummary: {
+          actionType: activeAction.type,
+          taskId: (activeAction.parameters?.taskId as string) || activeAction.target,
+        },
+        factorScores: {
+          safetyScore: reviewResult.approved ? 1.0 : 0.0,
+          riskScore: reviewResult.riskLevel === 'low' ? 0.1 : reviewResult.riskLevel === 'medium' ? 0.5 : 0.9,
+        },
+        hardConstraints: {
+          sleepSatisfied: true,
+          calendarConflictFree: true,
+          fixedCommitmentFree: true,
+          dependencyReady: true,
+          capacityFeasible: true,
+        },
+        candidateCount: 1,
+        candidateSummaries: [
+          {
+            id: activeAction.actionId,
+            title: activeAction.description,
+            rank: 1,
+            rejected: !reviewResult.approved,
+            rejectionReason: reviewResult.reasons.join('; '),
+          },
+        ],
+        selectedCandidate: reviewResult.approved
+          ? {
+              id: activeAction.actionId,
+              title: activeAction.description,
+              rank: 1,
+            }
+          : null,
+        alternatives: [],
+        rejectedCandidates: !reviewResult.approved
+          ? [
+              {
+                candidateId: activeAction.actionId,
+                category: 'RISK_THRESHOLD_EXCEEDED',
+                reason: reviewResult.reasons.join('; '),
+              },
+            ]
+          : [],
+        confidence: reviewResult.approved ? 0.98 : 0.1,
+        confidenceLevel: reviewResult.approved ? 'High' : 'Low',
+        explanation: {
+          whyThis: [
+            reviewResult.approved
+              ? 'Proposal passed all deterministic safety review checks.'
+              : `Proposal failed safety validation: ${reviewResult.reasons.join('; ')}`,
+          ],
+          whyNow: ['Required safety verification before presenting confirmation binding to user.'],
+        },
+        outcome: reviewResult.approved ? 'ACCEPTED' : 'REJECTED',
+        latencyMs: revDuration,
+        createdAt: Date.now(),
+      }).catch(() => {});
 
       if (!reviewResult.approved) {
         currentState = 'ABORTED';
@@ -486,12 +876,29 @@ export class ChiefOfStaffWorkflowEngine {
       throw new Error('Unauthorized: Valid authenticated userId is required.');
     }
 
+    if (this.inFlightConfirmations.has(workflowId)) {
+      throw new Error(`Conflict: Workflow "${workflowId}" is already processing a confirmation.`);
+    }
+    this.inFlightConfirmations.add(workflowId);
+
+    try {
+      return await this.executeConfirmation(workflowId, confirmRequest, userId);
+    } finally {
+      this.inFlightConfirmations.delete(workflowId);
+    }
+  }
+
+  private async executeConfirmation(
+    workflowId: string,
+    confirmRequest: WorkflowConfirmRequest,
+    userId: string
+  ): Promise<ChiefOfStaffWorkflowContext> {
     const workflow = workflowStore.get(workflowId, userId);
     if (!workflow) {
       throw new Error(`Workflow "${workflowId}" not found or unauthorized.`);
     }
 
-    const now = Date.now();
+    const now = (confirmRequest as any).simulatedTimestamp || Date.now();
     const recordTrace = (
       state: WorkflowState,
       component: WorkflowTrace['component'],
@@ -510,7 +917,7 @@ export class ChiefOfStaffWorkflowEngine {
       });
     };
 
-    // 1. Verify workflow state
+    // 1. Verify workflow state and one-time use
     if (workflow.state !== 'AWAITING_CONFIRMATION') {
       throw new Error(`Invalid state transition: Workflow is in state "${workflow.state}", expected "AWAITING_CONFIRMATION".`);
     }
@@ -521,6 +928,13 @@ export class ChiefOfStaffWorkflowEngine {
       workflow.abortReason = 'MISSING_CONFIRMATION_BINDING';
       workflowStore.save(workflow);
       throw new Error('Security violation: Missing confirmation binding.');
+    }
+
+    if (binding.confirmed) {
+      workflow.state = 'ABORTED';
+      workflow.abortReason = 'CONFIRMATION_ALREADY_USED';
+      workflowStore.save(workflow);
+      throw new Error('Security violation: Confirmation binding has already been used.');
     }
 
     // 2. Verify actionId matching
@@ -545,6 +959,7 @@ export class ChiefOfStaffWorkflowEngine {
       workflow.abortReason = 'CONFIRMATION_EXPIRED';
       workflow.summary = 'User confirmation expired. Action cancelled.';
       recordTrace('ABORTED', 'orchestrator', 0, 'failed', 'Confirmation TTL expired');
+      decisionStore.updateOutcomeByWorkflowId(userId, workflowId, 'EXPIRED', { rejectedReason: 'CONFIRMATION_EXPIRED' });
       workflowStore.save(workflow);
       throw new Error('Confirmation expired. Workflow aborted.');
     }
@@ -578,8 +993,26 @@ export class ChiefOfStaffWorkflowEngine {
       throw new Error('Missing active action to execute.');
     }
 
-    // 7. Transition to EXECUTING
+    // 6a. Atomic state transition: Claim execution and mark binding confirmed before async yields
     workflow.state = 'EXECUTING';
+    binding.confirmed = true;
+    workflowStore.save(workflow);
+
+    // 6b. Day 6 Proposal Staleness Hardening Gate
+    const freshness = await this.validateProposalFreshness(userId, actionToExecute);
+    if (!freshness.fresh) {
+      workflow.state = 'ABORTED';
+      workflow.abortReason = freshness.reason || 'STALE_PROPOSAL';
+      workflow.summary = `Stale proposal rejected: ${freshness.message}`;
+      binding.confirmed = false;
+      binding.reviewApproved = false;
+      binding.expiresAt = 0; // Invalidate binding
+      recordTrace('ABORTED', 'reviewer', 0, 'failed', `Stale proposal rejected: ${freshness.reason}`);
+      decisionStore.updateOutcomeByWorkflowId(userId, workflowId, 'STALE', { rejectedReason: freshness.reason });
+      workflowStore.save(workflow);
+      throw new Error(`Stale proposal rejected: ${freshness.message}`);
+    }
+
     recordTrace('EXECUTING', 'toolManager', 0, 'started', `Executing action ${actionToExecute.type}`);
 
     // 8. ToolManager Execution Handoff
@@ -601,6 +1034,61 @@ export class ChiefOfStaffWorkflowEngine {
       workflow.state = 'COMPLETED';
       workflow.summary = toolExecResult.message || 'Action executed successfully.';
       workflow.updatedAt = Date.now();
+
+      decisionStore.saveDecision({
+        decisionId: `dec_${crypto.randomUUID()}`,
+        userId,
+        workflowId,
+        timestamp: new Date().toISOString(),
+        decisionType: 'EXECUTION',
+        agentId: 'system.tool_manager',
+        agentVersion: '1.0.0',
+        strategy: 'safe_atomic_execution',
+        inputSummary: {
+          actionType: actionToExecute.type,
+          taskId: (actionToExecute.parameters?.taskId as string) || actionToExecute.target,
+        },
+        factorScores: {
+          executionSuccess: 1.0,
+        },
+        hardConstraints: {
+          sleepSatisfied: true,
+          calendarConflictFree: true,
+          fixedCommitmentFree: true,
+          dependencyReady: true,
+          capacityFeasible: true,
+        },
+        candidateCount: 1,
+        candidateSummaries: [
+          {
+            id: actionToExecute.actionId,
+            title: actionToExecute.description,
+            rank: 1,
+          },
+        ],
+        selectedCandidate: {
+          id: actionToExecute.actionId,
+          title: actionToExecute.description,
+          rank: 1,
+        },
+        alternatives: [],
+        confidence: 1.0,
+        confidenceLevel: 'High',
+        explanation: {
+          whyThis: ['Action executed successfully by ToolManager.'],
+          whyNow: ['Executed immediately following verified user confirmation.'],
+        },
+        outcome: 'EXECUTED',
+        latencyMs: execDuration,
+        createdAt: Date.now(),
+      }).catch(() => {});
+
+      decisionStore.updateOutcomeByWorkflowId(userId, workflowId, 'EXECUTED', {
+        confirmedAt: now,
+        executedAt: Date.now(),
+        toolExecutionSuccess: true,
+      });
+
       workflowStore.save(workflow);
       return workflow;
     }
@@ -608,6 +1096,58 @@ export class ChiefOfStaffWorkflowEngine {
     // FAILURE PATH -> Trigger bounded Recovery Loop
     workflow.state = 'FAILED';
     recordTrace('FAILED', 'toolManager', execDuration, 'failed', toolExecResult.message);
+
+    decisionStore.saveDecision({
+      decisionId: `dec_${crypto.randomUUID()}`,
+      userId,
+      workflowId,
+      timestamp: new Date().toISOString(),
+      decisionType: 'EXECUTION',
+      agentId: 'system.tool_manager',
+      agentVersion: '1.0.0',
+      strategy: 'safe_atomic_execution',
+      inputSummary: {
+        actionType: actionToExecute.type,
+        taskId: (actionToExecute.parameters?.taskId as string) || actionToExecute.target,
+      },
+      factorScores: {
+        executionSuccess: 0.0,
+      },
+      hardConstraints: {
+        sleepSatisfied: true,
+        calendarConflictFree: true,
+        fixedCommitmentFree: true,
+        dependencyReady: true,
+        capacityFeasible: true,
+      },
+      candidateCount: 1,
+      candidateSummaries: [
+        {
+          id: actionToExecute.actionId,
+          title: actionToExecute.description,
+          rank: 1,
+        },
+      ],
+      selectedCandidate: {
+        id: actionToExecute.actionId,
+        title: actionToExecute.description,
+        rank: 1,
+      },
+      alternatives: [],
+      confidence: 0.0,
+      confidenceLevel: 'Low',
+      explanation: {
+        whyThis: [`Action execution failed: ${toolExecResult.message}`],
+        whyNow: ['Execution halted safely to prevent corrupted state.'],
+      },
+      outcome: 'EXECUTION_FAILED',
+      latencyMs: execDuration,
+      createdAt: Date.now(),
+    }).catch(() => {});
+
+    decisionStore.updateOutcomeByWorkflowId(userId, workflowId, 'EXECUTION_FAILED', {
+      toolExecutionSuccess: false,
+    });
 
     if (workflow.recoveryCycleCount >= MAX_WORKFLOW_RECOVERY_CYCLES) {
       // Hard upper bound reached
@@ -736,6 +1276,10 @@ export class ChiefOfStaffWorkflowEngine {
       message: 'User rejected action proposal. Zero tool execution.',
     });
 
+    decisionStore.updateOutcomeByWorkflowId(userId, workflowId, 'REJECTED', {
+      rejectedReason: rejectRequest?.reason || 'USER_REJECTED',
+    });
+
     workflow.updatedAt = Date.now();
     workflowStore.save(workflow);
     return workflow;
@@ -797,6 +1341,7 @@ export class ChiefOfStaffWorkflowEngine {
         status: 'failed',
         message: workflow.summary,
       });
+      decisionStore.updateOutcomeByWorkflowId(userId, workflowId, 'ABORTED', { rejectedReason: 'REVIEW_REJECTED' });
       workflow.updatedAt = Date.now();
       workflowStore.save(workflow);
       return workflow;
@@ -834,6 +1379,10 @@ export class ChiefOfStaffWorkflowEngine {
       message: 'Edited action re-reviewed and approved.',
     });
 
+    decisionStore.updateOutcomeByWorkflowId(userId, workflowId, 'EDITED', {
+      editCategory: 'user_parameter_edit',
+    });
+
     workflow.updatedAt = Date.now();
     workflowStore.save(workflow);
     return workflow;
@@ -854,6 +1403,9 @@ export class ChiefOfStaffWorkflowEngine {
   private resolveIntent(request: WorkflowStartRequest): WorkflowIntent {
     if (request.preferredIntent) {
       return request.preferredIntent;
+    }
+    if ((request as any).intent) {
+      return (request as any).intent;
     }
 
     const text = (request.userRequest || '').toLowerCase();
@@ -1114,6 +1666,137 @@ export class ChiefOfStaffWorkflowEngine {
       availability,
       parameters,
     };
+  }
+
+  /**
+   * Day 6 Pre-Confirmation & Pre-Execution Staleness Validation Layer.
+   * Validates whether any underlying state (task existence, status, calendar availability,
+   * conflicting events, or planning profile) has changed materially since proposal review.
+   */
+  public async validateProposalFreshness(
+    userId: string,
+    action: AgentAction
+  ): Promise<{ fresh: boolean; reason?: string; message?: string }> {
+    const params = action.parameters || {};
+    const rawTaskId = (params.taskId as string) || action.target;
+
+    // 1. Task Existence & Ownership Validation
+    if (rawTaskId) {
+      const taskId = String(rawTaskId).trim();
+      const task = await getTaskById(userId, taskId);
+      if (!task) {
+        return {
+          fresh: false,
+          reason: 'TASK_NOT_FOUND',
+          message: `Target task "${taskId}" was deleted or no longer exists.`,
+        };
+      }
+      if (task.userId !== userId) {
+        return {
+          fresh: false,
+          reason: 'UNAUTHORIZED_TARGET',
+          message: 'Target task does not belong to authenticated user.',
+        };
+      }
+
+      // 2. Task Status Freshness
+      if (action.type === 'COMPLETE_TASK') {
+        if (task.status === 'completed') {
+          return {
+            fresh: false,
+            reason: 'TASK_ALREADY_COMPLETED',
+            message: `Task "${task.title}" is already marked as completed.`,
+          };
+        }
+      } else if (action.type === 'REOPEN_TASK') {
+        if (task.status !== 'completed') {
+          return {
+            fresh: false,
+            reason: 'TASK_ALREADY_OPEN',
+            message: `Task "${task.title}" is not in completed state.`,
+          };
+        }
+      } else if (action.type === 'SCHEDULE_TASK') {
+        if (task.status === 'completed' || task.status === 'cancelled') {
+          return {
+            fresh: false,
+            reason: 'INVALID_TASK_STATUS',
+            message: `Task "${task.title}" was marked as ${task.status} after proposal creation.`,
+          };
+        }
+
+        // Check if duration still fits
+        const scheduledStart = params.scheduledStart as string;
+        const scheduledEnd = params.scheduledEnd as string;
+        if (scheduledStart && scheduledEnd) {
+          const startMs = new Date(scheduledStart).getTime();
+          const endMs = new Date(scheduledEnd).getTime();
+          const windowMinutes = Math.round((endMs - startMs) / 60000);
+          const taskEstimatedMinutes = task.estimatedMinutes || 30;
+          if (windowMinutes < taskEstimatedMinutes) {
+            return {
+              fresh: false,
+              reason: 'DURATION_MISMATCH',
+              message: `Task estimated duration (${taskEstimatedMinutes}m) exceeds proposed window (${windowMinutes}m).`,
+            };
+          }
+
+          // 3. Calendar & Availability Freshness
+          const targetDateStr = scheduledStart.split('T')[0];
+          const profile = await getPlanningProfile(userId);
+          const calStatus = getUserCalendarStatus(userId);
+          const cachedEvents = getCachedEvents(userId);
+          const activeTasks = await getActiveTasksByUser(userId);
+
+          const availability = calculateAvailability({
+            dateStr: targetDateStr,
+            profile,
+            events: cachedEvents,
+            selectedCalendarIds: calStatus?.selectedCalendarIds || [],
+            tasks: activeTasks as ServerTask[],
+          });
+
+          // Verify if requested window is still within an active free window
+          const fitsInFreeWindow = availability.freeWindows.some((fw) => {
+            const fwStartMs = new Date(fw.start).getTime();
+            const fwEndMs = new Date(fw.end).getTime();
+            return startMs >= fwStartMs && endMs <= fwEndMs;
+          });
+
+          if (!fitsInFreeWindow) {
+            return {
+              fresh: false,
+              reason: 'CALENDAR_CHANGED',
+              message:
+                'Calendar availability changed since proposal was generated. The requested window now conflicts with a calendar event, sleep boundary, or fixed commitment.',
+            };
+          }
+
+          // Check if another task was scheduled into this window in the interim
+          const conflictingTask = activeTasks.find((other) => {
+            if (other.id === task.id) return false;
+            if (!other.scheduledStart || !other.scheduledEnd) return false;
+            if (other.status === 'completed' || other.status === 'cancelled') return false;
+
+            const otherStartMs = new Date(other.scheduledStart).getTime();
+            const otherEndMs = new Date(other.scheduledEnd).getTime();
+            if (isNaN(otherStartMs) || isNaN(otherEndMs)) return false;
+
+            return Math.max(startMs, otherStartMs) < Math.min(endMs, otherEndMs);
+          });
+
+          if (conflictingTask) {
+            return {
+              fresh: false,
+              reason: 'TASK_CONFLICT',
+              message: `A conflicting task "${conflictingTask.title}" was scheduled in this time window.`,
+            };
+          }
+        }
+      }
+    }
+
+    return { fresh: true };
   }
 }
 

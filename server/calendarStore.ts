@@ -389,3 +389,24 @@ export function getCachedEvents(userId: string, timeMin?: string, timeMax?: stri
     return true;
   });
 }
+
+export function setCachedEvents(userId: string, events: CalendarEvent[]): void {
+  const state = getOrCreateUserState(userId);
+  state.cachedEvents = events;
+  state.updatedAt = new Date().toISOString();
+  saveCalendarData();
+}
+
+export function clearCachedEvents(userId: string): void {
+  const state = getOrCreateUserState(userId);
+  state.cachedEvents = [];
+  state.updatedAt = new Date().toISOString();
+  saveCalendarData();
+}
+
+export function setUserCalendarStatus(userId: string, updates: Partial<UserCalendarState>): void {
+  const state = getOrCreateUserState(userId);
+  Object.assign(state, updates);
+  state.updatedAt = new Date().toISOString();
+  saveCalendarData();
+}

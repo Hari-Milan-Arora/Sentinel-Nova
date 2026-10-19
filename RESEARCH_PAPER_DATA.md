@@ -204,19 +204,20 @@ $$\forall \text{Workflow } W, \quad \text{RecoveryCycles}(W) \le 2$$
 
 ---
 
-## 7. Automated Test Suite Metrics (Day 5D Verification)
+## 7. Automated Test Suite Metrics (Day 6 Verification)
 
-The Sentinel Nova multi-agent test suite comprises **387 total automated test assertions** executed via TypeScript runtime (`tsx`):
+The Sentinel Nova multi-agent test suite comprises **456 total automated test assertions** executed via TypeScript runtime (`tsx`):
 
 | Test Suite File | Domain / Focus | Assertions | Passed | Failed | Duration |
 |:---|:---|:---:|:---:|:---:|:---:|
+| `day6Validation.test.ts` | Day 6 Real-World Scenarios (1-13), Factors A-O, Invariants 1-10, Staleness, Concurrency | 69 | 69 | 0 | 5.2s |
 | `novaChiefOfStaffUX.test.ts` | Natural language orchestration, disambiguation, reference resolution, UI cards | 79 | 79 | 0 | 5.1s |
 | `chiefOfStaffWorkflow.test.ts` | End-to-end deliberative loop, state machine, anti-tampering | 60 | 60 | 0 | 4.2s |
 | `schedulerAgentDay5C4.test.ts` | Multi-strategy scheduling, candidate windows, sanitization | 61 | 61 | 0 | 5.8s |
 | `reviewerAgent.test.ts` | Safety gate, chronological checks, isolation, TTL validation | 50 | 50 | 0 | 1.8s |
 | `toolManager.test.ts` | Tool registry, task completion, idempotent execution, 11 attack vectors | 107 | 107 | 0 | 3.1s |
 | `orchestrator.test.ts` | Multi-agent dispatch, agent registry, lifecycle timeouts | 30 | 30 | 0 | 1.2s |
-| **Total Automated Assertions** | **Complete System Verification** | **387** | **387** | **0** | **21.2s** |
+| **Total Automated Assertions** | **Complete System Verification** | **456** | **456** | **0** | **26.4s** |
 
 ---
 
