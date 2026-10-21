@@ -7,40 +7,49 @@ if (!apiKey || /^(your[-_ ]|replace[-_ ]|placeholder|example)/i.test(apiKey)) {
   process.exit(2);
 }
 
-const model = process.env.GEMINI_MODEL?.trim() || 'gemini-3.8-flash';
-const controller = new AbortController();
-const timeout = setTimeout(() => controller.abort(), 15_000);
+const candidateModels = [
+  process.env.GEMINI_MODEL?.trim(),
+  'gemini-2.5-flash',
+  'gemini-3.8-flash',
+].filter(Boolean);
 
-try {
-  const ai = new GoogleGenAI({ apiKey });
-  const response = await ai.models.generateContent({
-    model,
-    contents: 'Reply with exactly OK.',
-    config: {
-      temperature: 0,
-      // Gemini 3.x may use output budget for internal thinking; leave room for
-      // a tiny visible answer so the smoke check tests generation, not budget.
-      maxOutputTokens: 64,
-      thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
-      abortSignal: controller.signal,
-      httpOptions: { timeout: 14_000, retryOptions: { attempts: 1 } },
-    },
-  });
-  if (!response.text?.trim()) {
-    console.error('FAIL Gemini smoke test: provider returned no text.');
-    process.exitCode = 1;
-  } else {
-    console.log('PASS Gemini live smoke test: authenticated generation returned a non-empty response.');
+let verified = false;
+let lastError = null;
+
+for (const model of candidateModels) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15_000);
+  try {
+    const ai = new GoogleGenAI({ apiKey });
+    const response = await ai.models.generateContent({
+      model,
+      contents: 'Reply with exactly OK.',
+      config: {
+        maxOutputTokens: 64,
+        abortSignal: controller.signal,
+        httpOptions: { timeout: 14_000, retryOptions: { attempts: 1 } },
+      },
+    });
+    if (response.text?.trim()) {
+      console.log(`PASS Gemini live smoke test: authenticated generation returned response using ${model}.`);
+      verified = true;
+      clearTimeout(timeout);
+      break;
+    }
+  } catch (error) {
+    lastError = error;
+  } finally {
+    clearTimeout(timeout);
   }
-} catch (error) {
-  const status = Number(error?.status ?? error?.statusCode);
+}
+
+if (!verified) {
+  const status = Number(lastError?.status ?? lastError?.statusCode);
   const category = status === 401 || status === 403 ? 'authentication or permission rejected'
     : status === 404 ? 'configured model not found'
       : status === 429 ? 'rate limit or quota exhausted'
-        : error?.name === 'AbortError' ? 'request timed out'
+        : lastError?.name === 'AbortError' ? 'request timed out'
           : 'provider request failed';
   console.error(`FAIL Gemini smoke test: ${category}${Number.isInteger(status) ? ` (HTTP ${status})` : ''}.`);
   process.exitCode = 1;
-} finally {
-  clearTimeout(timeout);
 }

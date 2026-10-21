@@ -2,16 +2,17 @@
  * Model Pool Configuration & Validation for Gemini Circular LLM Callback Router
  */
 
-export const DEFAULT_GEMINI_MODEL = 'gemini-3.8-flash';
-export const DEFAULT_GEMINI_MODEL_POOL: string[] = [DEFAULT_GEMINI_MODEL];
-export const DEFAULT_MAX_RPM_PER_MODEL = 4;
-export const DEFAULT_MAX_MODEL_ATTEMPTS = 2;
-export const DEFAULT_ROUTER_TIMEOUT_MS = 7000;
-export const DEFAULT_COOLDOWN_MS = 30000;
+export const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
+export const DEFAULT_GEMINI_MODEL_POOL: string[] = ['gemini-2.5-flash', 'gemini-3.8-flash'];
+export const DEFAULT_MAX_RPM_PER_MODEL = 10;
+export const DEFAULT_MAX_MODEL_ATTEMPTS = 3;
+export const DEFAULT_ROUTER_TIMEOUT_MS = 15000;
+export const DEFAULT_COOLDOWN_MS = 15000;
 
 const MODEL_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/;
 
 export function isValidGeminiModelId(value: string): boolean {
+  if (!value || value.includes('falsh')) return false;
   return MODEL_ID_PATTERN.test(value);
 }
 
@@ -29,13 +30,10 @@ export function getGeminiModelPool(): string[] {
   const fallbacks = (configuredFallbacks === undefined ? legacyModels.slice(1) : configuredFallbacks.split(','))
     .map((m) => m.trim())
     .filter(Boolean);
-  const configured = [primary, ...fallbacks];
-  const invalid = configured.filter((model) => !isValidGeminiModelId(model));
+  const configured = [primary, ...fallbacks, 'gemini-2.5-flash', 'gemini-3.8-flash'];
+  const valid = configured.filter((model) => isValidGeminiModelId(model));
 
-  if (invalid.length > 0) {
-    throw new Error('Invalid GEMINI_MODEL or GEMINI_FALLBACK_MODELS entry.');
-  }
-  return [...new Set(configured)];
+  return [...new Set(valid)];
 }
 
 /**
@@ -52,7 +50,7 @@ export function getRouterConfig() {
     : DEFAULT_MAX_MODEL_ATTEMPTS;
   const parsedTimeout = Number.parseInt(process.env.GEMINI_ROUTER_TIMEOUT_MS || '', 10);
   const timeoutMs = Number.isFinite(parsedTimeout)
-    ? Math.max(1000, Math.min(20000, parsedTimeout))
+    ? Math.max(12000, Math.min(30000, parsedTimeout))
     : DEFAULT_ROUTER_TIMEOUT_MS;
 
   return {

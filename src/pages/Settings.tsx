@@ -13,6 +13,7 @@ import {
   CheckCircle2,
   ExternalLink,
   Brain,
+  RotateCcw,
 } from 'lucide-react';
 import { usePlanningProfile } from '../context/PlanningProfileContext';
 import { formatTime12 } from '../utils/scheduleUtils';
@@ -28,10 +29,29 @@ export default function Settings({ user, onLogout }: SettingsProps) {
   const navigate = useNavigate();
   const { profile, loading } = usePlanningProfile();
   const [activeTab, setActiveTab] = useState<'profile' | 'memory'>('profile');
+  const [seedingDemo, setSeedingDemo] = useState(false);
   const [outcomeCollectionEnabled, setOutcomeCollectionEnabled] = useState(false);
   const [outcomeConsentLoading, setOutcomeConsentLoading] = useState(true);
   const [outcomeConsentSaving, setOutcomeConsentSaving] = useState(false);
   const [outcomeConsentError, setOutcomeConsentError] = useState<string | null>(null);
+
+  const handleSeedDemoData = async () => {
+    setSeedingDemo(true);
+    try {
+      const res = await fetch('/api/demo/seed', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+      });
+      if (res.ok) {
+        window.location.reload();
+      }
+    } catch {
+      // Ignored
+    } finally {
+      setSeedingDemo(false);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -101,13 +121,25 @@ export default function Settings({ user, onLogout }: SettingsProps) {
             </div>
           </div>
 
-          <button
-            onClick={() => void onLogout()}
-            className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-500/20 px-4 py-2 text-sm font-medium text-red-300 hover:bg-red-500/10 transition"
-          >
-            <LogOut size={15} />
-            <span>Sign out</span>
-          </button>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <button
+              type="button"
+              onClick={handleSeedDemoData}
+              disabled={seedingDemo}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-violet-500/30 bg-violet-600/10 px-4 py-2 text-sm font-medium text-violet-300 hover:bg-violet-600/20 transition cursor-pointer disabled:opacity-50"
+              title="Pre-populate realistic tasks, strategic goals, and planning rhythm for evaluation"
+            >
+              <RotateCcw size={14} className={seedingDemo ? "animate-spin" : ""} />
+              <span>{seedingDemo ? "Seeding…" : "Reset / Seed Demo Data"}</span>
+            </button>
+            <button
+              onClick={() => void onLogout()}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-500/20 px-4 py-2 text-sm font-medium text-red-300 hover:bg-red-500/10 transition cursor-pointer"
+            >
+              <LogOut size={15} />
+              <span>Sign out</span>
+            </button>
+          </div>
         </div>
       </div>
 

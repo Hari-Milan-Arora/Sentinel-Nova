@@ -125,6 +125,30 @@ export default function Login() {
     }
   }, [ready, clientId, refresh, navigate, location.state]);
 
+  const handleDemoLogin = async () => {
+    setError('');
+    setIsSubmitting(true);
+    try {
+      const result = await fetch('/api/auth/demo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+      });
+      const data = await result.json();
+      if (!result.ok) throw new Error(data.error || 'Demo login failed.');
+      const authedUser = await refresh();
+      if (!authedUser) {
+        throw new Error('Authenticated session could not be established.');
+      }
+      const from = (location.state as { from?: string } | null)?.from;
+      navigate(from?.startsWith('/app') ? from : '/app', { replace: true });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Demo sign-in failed.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-950 text-white">
@@ -214,6 +238,25 @@ export default function Login() {
                     )}
                   </div>
                 )}
+
+                <div className="relative my-6 flex items-center justify-center">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-slate-800" />
+                  </div>
+                  <div className="relative bg-slate-950 px-3 text-xs text-slate-500">
+                    or for mentor evaluation
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleDemoLogin}
+                  disabled={isSubmitting}
+                  className="w-full flex items-center justify-center gap-2 rounded-xl border border-violet-500/40 bg-violet-600/10 px-4 py-3 text-xs font-semibold text-violet-300 hover:bg-violet-600/20 hover:border-violet-500/60 transition shadow-lg shadow-violet-950/20 cursor-pointer disabled:opacity-50"
+                >
+                  <Sparkles size={15} className="text-violet-400" />
+                  <span>Continue with Instant Demo Workspace</span>
+                </button>
               </div>
               <p className="mt-8 text-center text-[11px] leading-5 text-slate-600">
                 By continuing, you agree to use Sentinel Nova responsibly. Nova recommends actions; you remain in control of consequential changes.

@@ -1459,6 +1459,8 @@ export class ChiefOfStaffWorkflowEngine {
       text.includes('when can i') ||
       text.includes('find time for') ||
       text.includes('schedule task') ||
+      text.startsWith('schedule ') ||
+      text.includes(' schedule ') ||
       text.includes('time slot') ||
       text.includes('calendar slot') ||
       text.includes('fit in') ||

@@ -232,6 +232,91 @@ async function startServer() {
 
   app.post("/api/auth/logout", (req, res) => { clearSession(req, res); res.status(204).send(); });
 
+  app.post("/api/auth/demo", async (req, res) => {
+    try {
+      const demoUser: AuthUser = {
+        id: "demo_executive_evaluator",
+        email: "mentor.evaluator@sentinelnova.ai",
+        name: "Executive Mentor / Evaluator",
+      };
+      setSession(req, res, demoUser);
+      // Pre-seed portfolio, tasks, goals, and profile for demo
+      await getTasksByUser(demoUser.id);
+      await getProjectsByUser(demoUser.id);
+      await getGoalsByUser(demoUser.id);
+      const existingProfile = await getPlanningProfile(demoUser.id);
+      if (!existingProfile) {
+        await savePlanningProfile(demoUser.id, {
+          onboardingCompleted: true,
+          timezone: "UTC",
+          preferredWorkingHours: {
+            startTime: "09:00",
+            endTime: "17:00",
+            preferredPeriods: ["Morning", "Afternoon"],
+          },
+          sleepSchedule: {
+            weekdaySleep: "23:00",
+            weekdayWake: "07:00",
+            weekendDifferent: false,
+          },
+          recurringBlocks: [
+            {
+              id: "rb_demo_standup",
+              title: "Executive Architecture Sync",
+              type: "Work",
+              days: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+              startTime: "10:00",
+              endTime: "11:00",
+            },
+          ],
+          bufferMinutes: 15,
+        });
+      }
+      res.json({ authenticated: true, user: demoUser });
+    } catch (err: any) {
+      console.error("Demo login error:", err);
+      res.status(500).json({ error: "Failed to initialize demo session." });
+    }
+  });
+
+  app.post("/api/demo/seed", requireAuth, async (req, res) => {
+    try {
+      const user = (req as express.Request & { user: AuthUser }).user;
+      await getTasksByUser(user.id);
+      await getProjectsByUser(user.id);
+      await getGoalsByUser(user.id);
+      const profile = await savePlanningProfile(user.id, {
+        onboardingCompleted: true,
+        timezone: "UTC",
+        preferredWorkingHours: {
+          startTime: "09:00",
+          endTime: "17:00",
+          preferredPeriods: ["Morning", "Afternoon"],
+        },
+        sleepSchedule: {
+          weekdaySleep: "23:00",
+          weekdayWake: "07:00",
+          weekendDifferent: false,
+        },
+        recurringBlocks: [
+          {
+            id: "rb_demo_standup",
+            title: "Executive Architecture Sync",
+            type: "Work",
+            days: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+            startTime: "10:00",
+            endTime: "11:00",
+          },
+        ],
+        bufferMinutes: 15,
+      });
+      res.json({ success: true, profile });
+    } catch (err: any) {
+      console.error("Demo seed error:", err);
+      res.status(500).json({ error: "Failed to seed demo data." });
+    }
+  });
+
   app.get("/api/profile/planning", requireAuth, async (req, res) => {
     try {
       const user = (req as express.Request & { user: AuthUser }).user;

@@ -271,8 +271,8 @@ export class GeminiModelRouter {
       const selectedModel = candidate.model;
 
       try {
-        // Compute per-attempt remaining timeout
-        const perAttemptTimeout = Math.max(1, deadline - Date.now());
+        // Compute per-attempt remaining timeout (Google API enforces minimum 10s deadline)
+        const perAttemptTimeout = Math.max(12000, deadline - Date.now());
 
         let timeoutHandle: NodeJS.Timeout | null = null;
         const abortController = new AbortController();
@@ -289,7 +289,7 @@ export class GeminiModelRouter {
           config: {
             systemInstruction: request.systemInstruction,
             responseMimeType: request.config?.responseMimeType,
-            responseJsonSchema: request.config?.responseJsonSchema,
+            responseSchema: (request.config as any)?.responseSchema || request.config?.responseJsonSchema,
             temperature: request.config?.temperature,
             maxOutputTokens: request.config?.maxOutputTokens ?? 512,
             abortSignal: abortController.signal,
@@ -327,6 +327,7 @@ export class GeminiModelRouter {
           return {
             ok: true,
             text,
+            model: selectedModel,
             modelUsed: selectedModel,
             attempts: attempt,
             retryCount: attempt - 1,

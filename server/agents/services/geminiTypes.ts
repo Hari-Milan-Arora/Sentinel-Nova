@@ -45,6 +45,7 @@ export interface RouterCallRequest {
 export interface RouterCallResult {
   ok: boolean;
   text?: string;
+  model?: string;
   modelUsed?: string;
   attempts: number;
   exhausted?: boolean;
